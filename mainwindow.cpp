@@ -41,13 +41,6 @@ MainWindow::~MainWindow()
 }
 
 
-//static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
-//    VstMidiEvent note = {kVstMidiType, sizeof (VstMidiEvent), 0, 0, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
-//    VstEvents events = {1, 0, {(VstEvent*)&note, 0}};
-//    vstNode->vstInstance()->dispatcher (vstNode->vstInstance(), effProcessEvents, 0, 0, &events, 0);
-//}
-
-
 static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
     VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, 0, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
     VstMidiEvent* pEvent = new VstMidiEvent;
@@ -148,5 +141,13 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
 void MainWindow::on_showEditorButton_toggled(bool checked)
 {
     ui->vstPlaceholder->setVisible(checked);
-    adjustSize();
+    //adjustSize();
+    //ui->vstPlaceholder->setFixedSize(1000, 600);
+}
+
+
+namespace En {
+
+VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 120, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstTimeSigValid};
+
 }

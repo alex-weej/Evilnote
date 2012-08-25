@@ -13,21 +13,48 @@ int main(int argc, char*argv[])
     QString vstFileName;
 
 
-    //vstFileName = "/Library/Audio/Plug-Ins/VST/Sylenth1.vst";
-    vstFileName = "/Library/Audio/Plug-Ins/VST/Massive.vst";
+    //vstFileName = ;
+    //vstFileName = "/Library/Audio/Plug-Ins/VST/Massive.vst";
     //vstFileName = "/Library/Audio/Plug-Ins/VST/Omnisphere.vst";
     //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst";
+    //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
+    //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
 
-    En::VstModule vstModule(vstFileName);
+    //vstFileName = "/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst";
 
-    En::VstNode* vstNode = new En::VstNode(&vstModule);
+    En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Massive.vst");
+    //En::VstModule vstModule2("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/ArtsAcousticReverb.vst");
+    En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
+    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");
+    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Timeless 2.vst");
 
-    En::Host host(vstNode);
+    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
 
-    MainWindow w(vstNode);
-    w.show();
+    En::VstNode* vstNode1 = new En::VstNode(&vstModule1);
+    En::VstNode* vstNode2 = new En::VstNode(&vstModule2);
+
+
+    QVector<En::VstNode*> vstNodes;
+    vstNodes.push_back(vstNode1);
+    vstNodes.push_back(vstNode2);
+
+    En::Host host(vstNodes);
+
+    MainWindow w1(vstNode1);
+    w1.show();
+
+    MainWindow w2(vstNode2);
+    w2.show();
+
+
+    QMainWindow other;
+    other.setWindowTitle("Evilnote");
+    other.show();
 
     a.exec();
+
+    delete vstNode1;
+    delete vstNode2;
 
     return 0;
 }

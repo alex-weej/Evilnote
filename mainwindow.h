@@ -18,11 +18,11 @@
 
 namespace En {
 
-
+extern VstTimeInfo s_vstTimeInfo;
 
 typedef AEffect* (*PluginEntryProc) (audioMasterCallback audioMaster);
 
-// TODO: add this to the AudioWriter object
+
 inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt)
 {
     VstIntPtr result = 0;
@@ -41,14 +41,24 @@ inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index,
         }
     }
 
-    //if (!filtered)
-    //    qDebug("PLUG> HostCallback (opcode %d)\n index = %d, value = %p, ptr = %p, opt = %f", opcode, index, FromVstPtr<void> (value), ptr, opt);
+    //qDebug("audioMasterGetCurrentProcessLevel is %d", audioMasterGetCurrentProcessLevel);
+
+    if (!filtered)
+        //qDebug("PLUG> HostCallback (opcode %d)\n index = %d, value = %p, ptr = %p, opt = %f", opcode, index, FromVstPtr<void> (value), ptr, opt);
 
     switch (opcode)
     {
         case audioMasterVersion:
             result = kVstVersion;
             break;
+        case audioMasterGetTime: // 7
+            result = (VstIntPtr)&s_vstTimeInfo;
+            break;
+
+        case audioMasterGetCurrentProcessLevel: // 23
+            result = kVstProcessLevelUser;
+            break;
+
     }
 
     return result;
@@ -128,7 +138,7 @@ private:
     void unload() {
         if (m_bundle) {
             CFBundleUnloadExecutable(m_bundle);
-            CFRelease(m_bundle);
+            //CFRelease(m_bundle);
         }
         m_mainProc = 0;
     }
@@ -144,12 +154,12 @@ class VstNode : public QObject {
     Q_OBJECT
 
     AEffect* m_vstInstance;
-    std::vector<VstEvent*> m_eventQueue;
+    QVector<VstEvent*> m_eventQueue;
 
 public:
     //VstNode(AEffect* vstInstance) : m_vstInstance(vstInstance) {
     VstNode(VstModule* vstModule) : m_vstInstance(vstModule->createVstInstance()) {
-        this->setParent(vstModule); // is this right?
+        //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
         m_vstInstance->dispatcher (m_vstInstance, effOpen, 0, 0, 0, 0);
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
         m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, 512, 0, 0);
@@ -160,7 +170,7 @@ public:
         return m_vstInstance;
     }
 
-    ~VstNode() {
+    virtual ~VstNode() {
         m_vstInstance->dispatcher (m_vstInstance, effClose, 0, 0, 0, 0);
         // TODO: how the f do we delete this once we're done with it?
         //delete m_vstInstance; // this SIGABRTs
@@ -175,7 +185,7 @@ public:
     void processEvents() {
         size_t numEvents = m_eventQueue.size();
         if (numEvents) {
-            qDebug() << "processing events" << numEvents;
+            //qDebug() << "processing events" << numEvents;
             VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * (numEvents - 1));
             events->numEvents = numEvents;
             events->reserved = 0;
@@ -207,6 +217,10 @@ public:
         return ret;
     }
 
+    void showEvent(QShowEvent* event);
+
+    void hideEvent(QHideEvent* event);
+
 };
 
 
@@ -218,21 +232,21 @@ class Host : public QObject {
     QIODevice* m_ioDevice; // not owned
     QAudioFormat m_format;
     QByteArray m_buffer;
-    QVector<float> m_floatBlock[2];
+    QVector<float> m_floatBlock[4]; // 2 in 2 out
     QAudioOutput* m_audioOutput;
     QTimer* m_timer;
     unsigned long m_globalSampleIndex;
-    En::VstNode* m_vstNode;
+    QVector<En::VstNode*> m_vstNodes;
     unsigned m_blockSizeSamples;
 
 public:
 
-    Host(En::VstNode* vstNode)
+    Host(const QVector<En::VstNode*>& vstNodes)
         : m_ioDevice(0)
         , m_audioOutput(0)
         , m_timer(0)
         , m_globalSampleIndex(0)
-        , m_vstNode(vstNode) {
+        , m_vstNodes(vstNodes) {
         init();
     }
 
@@ -252,7 +266,7 @@ public:
 
         m_audioOutput = new QAudioOutput(m_format, this);
 
-        const int bufferSizeSamples = 4096;
+        const int bufferSizeSamples = 512;
         m_audioOutput->setBufferSize(bufferSizeSamples * m_format.channels() * m_format.sampleSize() / 8);
 
 
@@ -263,13 +277,13 @@ public:
 
         qDebug() << m_audioOutput->error() << QAudio::NoError;
 
-        qDebug() << "buffer size" << m_audioOutput->bufferSize();
-        qDebug() << "period size" << m_audioOutput->periodSize();
+        qDebug() << "buffer size (bytes)" << m_audioOutput->bufferSize();
+        qDebug() << "period size (bytes)" << m_audioOutput->periodSize();
 
         m_blockSizeSamples = m_audioOutput->periodSize() / m_format.channelCount() / (m_format.sampleSize() / 8);
         qDebug() << "block size (samples)" << m_blockSizeSamples;
 
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < 4; ++i)
             m_floatBlock[i].resize(m_blockSizeSamples);
 
         m_buffer.resize(m_audioOutput->periodSize());
@@ -278,7 +292,7 @@ public:
 
         m_timer = new QTimer(this);
         m_timer->setSingleShot(true);
-        m_timer->setInterval(20);
+        m_timer->setInterval(1);
         connect(m_timer, SIGNAL(timeout()), this, SLOT(writeData()));
         m_timer->start();
 
@@ -312,24 +326,26 @@ public slots:
         int sampleRate = m_format.sampleRate();
 
 
-        float* shadowFloats[2];
-        shadowFloats[0] = m_floatBlock[0].data();
-        shadowFloats[1] = m_floatBlock[1].data();
+        float* shadowFloats[4];
+        for (int i = 0; i < 4; ++i) {
+            shadowFloats[i] = m_floatBlock[i].data();
+        }
 
         for (int i = 0; i < chunks; ++i) {
         // generate a buffer and write it
 
+            int ins = 0;
+            int outs = 2;
 
-            // generate float data first, like rendering VST.
-            if (0) {
-                for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
-                    m_floatBlock[0][sampleIndex] = qSin(2.f * M_PI * 880 * (m_globalSampleIndex % sampleRate) / sampleRate);
-                    m_floatBlock[1][sampleIndex] = qSin(2.f * M_PI * 990 * (m_globalSampleIndex % sampleRate) / sampleRate);
-                    m_globalSampleIndex++;
-                }
-            } else {
-                m_vstNode->processEvents();
-                m_vstNode->vstInstance()->processReplacing (m_vstNode->vstInstance(), 0, shadowFloats, m_blockSizeSamples);
+            for (int j = 0; j < 2; ++j) {
+
+                VstNode* vstNode = m_vstNodes[1-j];
+
+                vstNode->processEvents();
+                //qDebug() << "processReplacing" << j;
+                vstNode->vstInstance()->processReplacing (vstNode->vstInstance(), &shadowFloats[ins], &shadowFloats[outs], m_blockSizeSamples);
+
+                std::swap(ins, outs);
             }
 
             // convert float data buffers to our audio format
@@ -338,7 +354,7 @@ public slots:
 
             for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
                 for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                    *ptr++ = qint16(m_floatBlock[channel][sampleIndex] * 32767);
+                    *ptr++ = qint16(m_floatBlock[outs + channel][sampleIndex] * 32767);
                 }
             }
 
