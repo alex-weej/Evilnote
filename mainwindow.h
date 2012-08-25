@@ -154,6 +154,7 @@ class VstNode : public QObject {
     Q_OBJECT
 
     AEffect* m_vstInstance;
+    QMutex m_eventQueueMutex;
     QVector<VstEvent*> m_eventQueue;
 
 public:
@@ -179,10 +180,12 @@ public:
 
 
     void queueEvent(VstEvent* event) {
+        QMutexLocker locker(&m_eventQueueMutex);
         m_eventQueue.push_back(event);
     }
 
     void processEvents() {
+        QMutexLocker locker(&m_eventQueueMutex);
         size_t numEvents = m_eventQueue.size();
         if (numEvents) {
             //qDebug() << "processing events" << numEvents;
@@ -191,9 +194,11 @@ public:
             events->reserved = 0;
             //VstEvent* event = &events->events[0];
             std::copy(m_eventQueue.begin(), m_eventQueue.end(), &events->events[0]);
+            m_eventQueue.clear();
+            locker.unlock();
+
             events->events[numEvents] = 0;
             vstInstance()->dispatcher (vstInstance(), effProcessEvents, 0, 0, events, 0);
-            m_eventQueue.clear();
         }
     }
 
@@ -203,19 +208,17 @@ public:
 
 
 
-class VstInterfaceWidget: public QMacCocoaViewContainer {
+class VstEditorWidget: public QMacCocoaViewContainer {
     Q_OBJECT
 
     VstNode* m_vstNode;
+    class NSView* m_view;
 
 public:
-    VstInterfaceWidget(VstNode* vstNode, QWidget* parent = 0);
+    VstEditorWidget(VstNode* vstNode, QWidget* parent = 0);
+    virtual ~VstEditorWidget();
 
-    QSize sizeHint() const {
-        QSize ret = QMacCocoaViewContainer::sizeHint();
-        qDebug() << "sizeHint" << ret;
-        return ret;
-    }
+    QSize sizeHint() const;
 
     void showEvent(QShowEvent* event);
 
@@ -301,6 +304,10 @@ public:
 
     }
 
+    void stop() {
+        m_timer->stop();
+    }
+
 
 public slots:
 
@@ -380,6 +387,27 @@ public slots:
 };
 
 
+
+class HostThread : public QThread {
+    QVector<VstNode*> m_vstNodes;
+    Host* m_host;
+public:
+    HostThread(const QVector<VstNode*>& vstNodes) : m_vstNodes(vstNodes), m_host(0) {
+
+    }
+
+    void run() {
+        m_host = new Host(m_vstNodes);
+
+        QThread::exec();
+    }
+
+    virtual ~HostThread() {
+        m_host->stop();
+    }
+};
+
+
 } // namespace En
 
 
@@ -414,7 +442,10 @@ private slots:
 private:
     Ui::MainWindow *ui;
     En::VstNode* m_vstNode; // not owned
-    int note;
+    int m_note;
+    QVector<int> m_funkyTown;
+    unsigned m_funkyTownPos;
+    int m_lastNote;
 };
 
 

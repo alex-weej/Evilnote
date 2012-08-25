@@ -5,7 +5,7 @@ MainWindow::MainWindow(En::VstNode* vstNode, QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     m_vstNode(vstNode),
-    note(60)
+    m_note(60)
 {
     ui->setupUi(this);
 
@@ -16,8 +16,18 @@ MainWindow::MainWindow(En::VstNode* vstNode, QWidget *parent) :
 //    QLineEdit* le = new QLineEdit;
 //    ui->vstPlaceholder->addWidget(le);
 
-    //QVBoxLayout layout(ui->vstInterface);
-    En::VstInterfaceWidget* interface = new En::VstInterfaceWidget(vstNode, ui->vstPlaceholder);
+    QVBoxLayout* layout = new QVBoxLayout(ui->vstPlaceholder);
+    En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode, ui->vstPlaceholder);
+    //QLineEdit* interface = new QLineEdit;
+    layout->addWidget(interface);
+
+
+    m_funkyTownPos = 0;
+    m_funkyTown << 0 << 0 << -2 << 0 << -5 << -5 << 0 << 5 << 4 << 0;
+
+
+    //En::VstInterfaceWidget* interface = new En::VstInterfaceWidget(vstNode, this);
+    //setCentralWidget(interface);
 
     //ui->verticalLayout->addWidget(interface);
     //layout.addWidget(interface);
@@ -50,19 +60,31 @@ static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned cha
 
 void MainWindow::on_testNoteButton_pressed()
 {
-    qDebug() << "Pressed";
+    int note = 0;
+
+    // FUNKYTOWN
+    if (QApplication::keyboardModifiers() == Qt::ShiftModifier) {
+
+        note = m_funkyTown[m_funkyTownPos] + 72;
+        m_funkyTownPos = (m_funkyTownPos + 1) % m_funkyTown.size();
+
+    } else {
+
+        note = m_note++;
+        if (m_note > 72) {
+            m_note = 60;
+        }
+    }
+
+
     sendNote(m_vstNode, note, 100);
+    m_lastNote = note;
 
 }
 
 void MainWindow::on_testNoteButton_released()
 {
-    qDebug() << "Released";
-    sendNote(m_vstNode, note, 0);
-    note++;
-    if (note > 72) {
-        note = 60;
-    }
+    sendNote(m_vstNode, m_lastNote, 0);
 }
 
 static int keyEventToNote(QKeyEvent* event) {
@@ -126,8 +148,6 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 
     sendNote(m_vstNode, note, 100);
 
-
-    //qDebug() << "press" << event->key();
 }
 
 void MainWindow::keyReleaseEvent(QKeyEvent* event) {
@@ -141,8 +161,9 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
 void MainWindow::on_showEditorButton_toggled(bool checked)
 {
     ui->vstPlaceholder->setVisible(checked);
-    //adjustSize();
-    //ui->vstPlaceholder->setFixedSize(1000, 600);
+    // this seems to be necessary to force the sizeHint to be updated so we actually shrink to fit.
+    QCoreApplication::processEvents();
+    adjustSize();
 }
 
 

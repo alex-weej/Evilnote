@@ -38,7 +38,10 @@ int main(int argc, char*argv[])
     vstNodes.push_back(vstNode1);
     vstNodes.push_back(vstNode2);
 
-    En::Host host(vstNodes);
+    //En::Host host(vstNodes);
+
+    En::HostThread* hostThread = new En::HostThread(vstNodes);
+    hostThread->start();
 
     MainWindow w1(vstNode1);
     w1.show();
@@ -52,6 +55,11 @@ int main(int argc, char*argv[])
     other.show();
 
     a.exec();
+
+    hostThread->quit();
+    //qDebug() << "Waiting for host thread to finish up...";
+    hostThread->wait();
+    //qDebug() << "Host thread finished";
 
     delete vstNode1;
     delete vstNode2;
