@@ -8,7 +8,6 @@
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Carbon/Carbon.h>
-//#include <Cocoa/Cocoa.h>
 
 #include "pluginterfaces/vst2.x/aeffectx.h"
 #include <algorithm>
@@ -138,7 +137,7 @@ private:
     void unload() {
         if (m_bundle) {
             CFBundleUnloadExecutable(m_bundle);
-            //CFRelease(m_bundle);
+            CFRelease(m_bundle);
         }
         m_mainProc = 0;
     }
@@ -299,9 +298,6 @@ public:
         connect(m_timer, SIGNAL(timeout()), this, SLOT(writeData()));
         m_timer->start();
 
-        //m_audioOutput->resume();
-
-
     }
 
     void stop() {
@@ -338,21 +334,21 @@ public slots:
             shadowFloats[i] = m_floatBlock[i].data();
         }
 
+        float** inputBlock = &shadowFloats[0];
+        float** outputBlock = &shadowFloats[2];
+
         for (int i = 0; i < chunks; ++i) {
         // generate a buffer and write it
 
-            int ins = 0;
-            int outs = 2;
-
             for (int j = 0; j < 2; ++j) {
 
-                VstNode* vstNode = m_vstNodes[1-j];
+                VstNode* vstNode = m_vstNodes[j];
 
                 vstNode->processEvents();
                 //qDebug() << "processReplacing" << j;
-                vstNode->vstInstance()->processReplacing (vstNode->vstInstance(), &shadowFloats[ins], &shadowFloats[outs], m_blockSizeSamples);
+                vstNode->vstInstance()->processReplacing (vstNode->vstInstance(), inputBlock, outputBlock, m_blockSizeSamples);
 
-                std::swap(ins, outs);
+                std::swap(inputBlock, outputBlock);
             }
 
             // convert float data buffers to our audio format
@@ -361,7 +357,8 @@ public slots:
 
             for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
                 for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                    *ptr++ = qint16(m_floatBlock[outs + channel][sampleIndex] * 32767);
+                    float clamped = std::min(std::max(inputBlock[channel][sampleIndex], -1.f), 1.f);
+                    *ptr++ = qint16(clamped * 32767);
                 }
             }
 
