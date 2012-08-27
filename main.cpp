@@ -23,6 +23,7 @@ int main(int argc, char*argv[])
     //vstFileName = "/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst";
 
     En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Massive.vst");
+    //En::VstModule vstModule1("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst");
     //En::VstModule vstModule2("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/ArtsAcousticReverb.vst");
     En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");

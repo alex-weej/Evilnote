@@ -154,11 +154,14 @@ class VstNode : public QObject {
 
     AEffect* m_vstInstance;
     QMutex m_eventQueueMutex;
-    QVector<VstEvent*> m_eventQueue;
+    QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
+    int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
 
 public:
     //VstNode(AEffect* vstInstance) : m_vstInstance(vstInstance) {
-    VstNode(VstModule* vstModule) : m_vstInstance(vstModule->createVstInstance()) {
+    VstNode(VstModule* vstModule)
+        : m_vstInstance(vstModule->createVstInstance())
+        , m_eventQueueWriteIndex(0) {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
         m_vstInstance->dispatcher (m_vstInstance, effOpen, 0, 0, 0, 0);
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
@@ -174,30 +177,41 @@ public:
         m_vstInstance->dispatcher (m_vstInstance, effClose, 0, 0, 0, 0);
         // TODO: how the f do we delete this once we're done with it?
         //delete m_vstInstance; // this SIGABRTs
+        //free(m_vstInstance);// this malloc errors: pointer being freed was not allocated.
         m_vstInstance = 0;
     }
 
 
     void queueEvent(VstEvent* event) {
         QMutexLocker locker(&m_eventQueueMutex);
-        m_eventQueue.push_back(event);
+        m_eventQueue[m_eventQueueWriteIndex].push_back(event);
     }
 
     void processEvents() {
+        // Take a reference to the event queue, and buffer swap
         QMutexLocker locker(&m_eventQueueMutex);
-        size_t numEvents = m_eventQueue.size();
+        QVector<VstEvent*>& eventQueue = m_eventQueue[m_eventQueueWriteIndex];
+        m_eventQueueWriteIndex = !m_eventQueueWriteIndex;
+        locker.unlock();
+
+        size_t numEvents = eventQueue.size();
         if (numEvents) {
-            //qDebug() << "processing events" << numEvents;
+            qDebug() << "processing events" << numEvents;
             VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * (numEvents - 1));
             events->numEvents = numEvents;
             events->reserved = 0;
-            //VstEvent* event = &events->events[0];
-            std::copy(m_eventQueue.begin(), m_eventQueue.end(), &events->events[0]);
-            m_eventQueue.clear();
+            std::copy(eventQueue.begin(), eventQueue.end(), &events->events[0]);
+            eventQueue.clear();
             locker.unlock();
 
             events->events[numEvents] = 0;
             vstInstance()->dispatcher (vstInstance(), effProcessEvents, 0, 0, events, 0);
+
+            // Think I need to free the events here. This could be done in a different thread?
+            for (unsigned i = 0; i < numEvents; ++i) {
+                free(events->events[i]);
+            }
+
         }
     }
 
@@ -324,6 +338,7 @@ public slots:
 
         int chunks = m_audioOutput->bytesFree() / m_audioOutput->periodSize();
 
+
         //qDebug() << "chunks" << chunks;
 
         int sampleRate = m_format.sampleRate();
@@ -334,18 +349,21 @@ public slots:
             shadowFloats[i] = m_floatBlock[i].data();
         }
 
+        // two stereo pairs
         float** inputBlock = &shadowFloats[0];
         float** outputBlock = &shadowFloats[2];
 
         for (int i = 0; i < chunks; ++i) {
         // generate a buffer and write it
 
+
+            // for each plugin in turn
             for (int j = 0; j < 2; ++j) {
 
                 VstNode* vstNode = m_vstNodes[j];
 
+
                 vstNode->processEvents();
-                //qDebug() << "processReplacing" << j;
                 vstNode->vstInstance()->processReplacing (vstNode->vstInstance(), inputBlock, outputBlock, m_blockSizeSamples);
 
                 std::swap(inputBlock, outputBlock);
@@ -369,6 +387,10 @@ public slots:
             //qDebug("%lld bytes written!", written);
 
             //qDebug() << "error state" << m_audioOutput->error() << QAudio::NoError;
+
+            // update vst time info struct
+            s_vstTimeInfo.samplePos += m_blockSizeSamples;
+            qDebug() << "sample pos" << s_vstTimeInfo.samplePos;
         }
 
         m_timer->start();

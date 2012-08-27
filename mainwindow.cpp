@@ -53,8 +53,8 @@ MainWindow::~MainWindow()
 
 static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
     VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, 0, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
-    VstMidiEvent* pEvent = new VstMidiEvent;
-    memcpy(pEvent, &event, sizeof(event));
+    // heap that shit.
+    VstMidiEvent* pEvent = new VstMidiEvent(event);
     vstNode->queueEvent((VstEvent*)pEvent);
 }
 
@@ -88,6 +88,11 @@ void MainWindow::on_testNoteButton_released()
 }
 
 static int keyEventToNote(QKeyEvent* event) {
+
+    // don't process if modifiers are used!
+    if (event->modifiers()) {
+        return -1;
+    }
 
     int note = -1;
 
@@ -169,6 +174,6 @@ void MainWindow::on_showEditorButton_toggled(bool checked)
 
 namespace En {
 
-VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 120, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstTimeSigValid};
+VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstTimeSigValid};
 
 }
