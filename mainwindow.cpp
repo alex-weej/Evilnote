@@ -1,7 +1,12 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-MainWindow::MainWindow(En::VstNode* vstNode, QWidget *parent) :
+namespace En {
+
+VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstPpqPosValid | kVstTimeSigValid | kVstTempoValid};
+
+
+NodeWindow::NodeWindow(En::VstNode* vstNode, QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     m_vstNode(vstNode),
@@ -45,7 +50,7 @@ MainWindow::MainWindow(En::VstNode* vstNode, QWidget *parent) :
 
 }
 
-MainWindow::~MainWindow()
+NodeWindow::~NodeWindow()
 {
     delete ui;
 }
@@ -58,7 +63,7 @@ static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned cha
     vstNode->queueEvent((VstEvent*)pEvent);
 }
 
-void MainWindow::on_testNoteButton_pressed()
+void NodeWindow::on_testNoteButton_pressed()
 {
     int note = 0;
 
@@ -82,7 +87,7 @@ void MainWindow::on_testNoteButton_pressed()
 
 }
 
-void MainWindow::on_testNoteButton_released()
+void NodeWindow::on_testNoteButton_released()
 {
     sendNote(m_vstNode, m_lastNote, 0);
 }
@@ -141,7 +146,7 @@ static int keyEventToNote(QKeyEvent* event) {
     return note + transpose;
 }
 
-void MainWindow::keyPressEvent(QKeyEvent* event) {
+void NodeWindow::keyPressEvent(QKeyEvent* event) {
     if (event->isAutoRepeat()) {
         return;
     }
@@ -155,7 +160,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 
 }
 
-void MainWindow::keyReleaseEvent(QKeyEvent* event) {
+void NodeWindow::keyReleaseEvent(QKeyEvent* event) {
     int note = keyEventToNote(event);
     if (note == -1) {
         return QMainWindow::keyPressEvent(event);
@@ -163,17 +168,12 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event) {
     sendNote(m_vstNode, note, 0);
 }
 
-void MainWindow::on_showEditorButton_toggled(bool checked)
+void NodeWindow::on_showEditorButton_toggled(bool checked)
 {
     ui->vstPlaceholder->setVisible(checked);
     // this seems to be necessary to force the sizeHint to be updated so we actually shrink to fit.
     QCoreApplication::processEvents();
     adjustSize();
 }
-
-
-namespace En {
-
-VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstPpqPosValid | kVstTimeSigValid | kVstTempoValid};
 
 }

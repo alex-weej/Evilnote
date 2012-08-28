@@ -18,6 +18,11 @@
 #include <mach/mach_time.h>
 
 
+namespace Ui {
+class MainWindow;
+}
+
+
 
 
 namespace En {
@@ -155,22 +160,71 @@ private:
 class Node;
 class VstNode;
 class MixerNode;
+class NodeGroup;
 
-class Node: public QObject {
+
+class NodeGroup: public QObject {
+
     Q_OBJECT
+
+    QVector<Node*> m_nodes;
+
 public:
-    virtual MixerNode* mixerNode() {
-        return 0;
+
+    virtual ~NodeGroup() {
+        Q_FOREACH (Node* node, m_nodes) {
+            delete node;
+        }
     }
-    virtual VstNode* vstNode() {
-        return 0;
+
+    void addChildNode(Node* node) {
+        m_nodes.push_back(node);
+    }
+
+    unsigned numChildNodes() const {
+        return m_nodes.size();
+    }
+
+    Node* childNode(unsigned index) const {
+        return m_nodes[index];
     }
 };
 
-class MixerNode: public Node {
+
+class Node: public QObject {
+
     Q_OBJECT
-    QVector<Node*> m_inputs;
+
+    NodeGroup* m_nodeGroup;
+
 public:
+
+    Node(NodeGroup* nodeGroup)
+        : m_nodeGroup(nodeGroup) {
+        nodeGroup->addChildNode(this);
+    }
+
+    virtual MixerNode* mixerNode() {
+        return 0;
+    }
+
+    virtual VstNode* vstNode() {
+        return 0;
+    }
+
+};
+
+class MixerNode: public Node {
+
+    Q_OBJECT
+
+    QVector<Node*> m_inputs;
+
+public:
+
+    MixerNode(NodeGroup* nodeGroup)
+            : Node(nodeGroup) {}
+
     virtual MixerNode* mixerNode() {
         return this;
     }
@@ -190,6 +244,7 @@ public:
 };
 
 class VstNode : public Node {
+
     Q_OBJECT
 
     AEffect* m_vstInstance;
@@ -199,9 +254,10 @@ class VstNode : public Node {
     VstNode* m_input;
 
 public:
-    //VstNode(AEffect* vstInstance) : m_vstInstance(vstInstance) {
-    VstNode(VstModule* vstModule)
-        : m_vstInstance(vstModule->createVstInstance())
+
+    VstNode(VstModule* vstModule, NodeGroup* nodeGroup)
+        : Node(nodeGroup)
+        , m_vstInstance(vstModule->createVstInstance())
         , m_eventQueueWriteIndex(0)
         , m_input(0) {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
@@ -600,57 +656,17 @@ signals:
 };
 
 
-class MainWindow: public QMainWindow {
-
-    Q_OBJECT
-
-    QProgressBar* m_utilisationMeter;
-
-public:
-
-    MainWindow(QWidget* parent=0)
-        : QMainWindow(parent) {
-
-        setWindowTitle("Evilnote");
-
-        //QVBoxLayout* mainLayout = new QVBoxLayout(this);
-
-        m_utilisationMeter = new QProgressBar(this);
-        m_utilisationMeter->setRange(0, INT_MAX);
-
-        //mainLayout->addWidget(m_utilisationMeter);
-        setCentralWidget(m_utilisationMeter);
-
-    }
-
-public slots:
-
-    void utilisation(float utilisationAmount) {
-        m_utilisationMeter->setValue(utilisationAmount * INT_MAX);
-    }
-
-};
-
-
-} // namespace En
 
 
 
 
-
-
-
-namespace Ui {
-class MainWindow;
-}
-
-class MainWindow : public QMainWindow
+class NodeWindow : public QMainWindow
 {
     Q_OBJECT
-    
+
 public:
-    explicit MainWindow(En::VstNode* vstNode, QWidget *parent = 0);
-    ~MainWindow();
+    explicit NodeWindow(En::VstNode* vstNode, QWidget *parent = 0);
+    ~NodeWindow();
 
 protected:
     void keyPressEvent(QKeyEvent* event);
@@ -671,6 +687,86 @@ private:
     unsigned m_funkyTownPos;
     int m_lastNote;
 };
+
+
+
+class VstButton: public QPushButton {
+    Q_OBJECT
+
+public:
+    VstButton(VstNode* vstNode, QWidget* parent=0)
+        : m_vstNode(vstNode) {
+        setCheckable(true);
+        setText(tr("VST %1").arg((ulong)vstNode));
+        connect(this, SIGNAL(toggled(bool)), SLOT(showOrHide(bool)));
+        m_window = new NodeWindow(m_vstNode);
+    }
+
+    virtual ~VstButton() {
+        delete m_window;
+    }
+
+private slots:
+    void showOrHide(bool visible) {
+        m_window->setVisible(visible);
+    }
+
+private:
+    VstNode* m_vstNode;
+    NodeWindow* m_window;
+};
+
+
+class MainWindow: public QMainWindow {
+
+    Q_OBJECT
+
+    QProgressBar* m_utilisationMeter;
+    NodeGroup* m_group;
+
+public:
+
+    MainWindow(NodeGroup* group, QWidget* parent=0)
+        : QMainWindow(parent)
+        , m_group(group) {
+
+        setWindowTitle("Evilnote");
+
+        QWidget* widget = new QWidget();
+
+        QVBoxLayout* mainLayout = new QVBoxLayout(widget);
+        setCentralWidget(widget);
+
+        m_utilisationMeter = new QProgressBar(this);
+        m_utilisationMeter->setRange(0, INT_MAX);
+
+        mainLayout->addWidget(m_utilisationMeter);
+        //setCentralWidget(m_utilisationMeter);
+
+        for (unsigned i = 0; i < m_group->numChildNodes(); ++i) {
+            Node* node = m_group->childNode(i);
+            VstNode* vstNode = node->vstNode();
+            if (vstNode) {
+                VstButton* button = new VstButton(vstNode, widget);
+                mainLayout->addWidget(button);
+            }
+        }
+
+    }
+
+public slots:
+
+    void utilisation(float utilisationAmount) {
+        m_utilisationMeter->setValue(utilisationAmount * INT_MAX);
+    }
+
+};
+
+
+} // namespace En
+
+
+
 
 
 

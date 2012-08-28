@@ -8,12 +8,11 @@
 int main(int argc, char*argv[])
 {
     QApplication a(argc, argv);
-    a.setApplicationName("Audio Output Test");
+    a.setApplicationName("Evilnote");
 
     QString vstFileName;
 
 
-    //vstFileName = ;
     //vstFileName = "/Library/Audio/Plug-Ins/VST/Massive.vst";
     //vstFileName = "/Library/Audio/Plug-Ins/VST/Omnisphere.vst";
     //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst";
@@ -34,10 +33,11 @@ int main(int argc, char*argv[])
     En::VstModule stutterModule("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
     //En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
 
-    En::VstNode* massive1 = new En::VstNode(&massiveModule);
-    En::VstNode* massive2 = new En::VstNode(&massiveModule);
-    En::VstNode* ubermod1 = new En::VstNode(&ubermodModule);
-    En::VstNode* stutter1 = new En::VstNode(&stutterModule);
+    En::NodeGroup* rootGroup = new En::NodeGroup();
+    En::VstNode* massive1 = new En::VstNode(&massiveModule, rootGroup);
+    En::VstNode* massive2 = new En::VstNode(&massiveModule, rootGroup);
+    En::VstNode* ubermod1 = new En::VstNode(&ubermodModule, rootGroup);
+    En::VstNode* stutter1 = new En::VstNode(&stutterModule, rootGroup);
     //En::VstNode* krreverb1 = new En::VstNode(&reverbModule);
 
 
@@ -45,38 +45,17 @@ int main(int argc, char*argv[])
     stutter1->setInput(massive1);
 
 
-    //QVector<En::VstNode*> vstNodes;
-    //vstNodes.push_back(massive1);
-    //vstNodes.push_back(ubermodModule1);
-
-    En::MixerNode* mixerNode = new En::MixerNode();
+    En::MixerNode* mixerNode = new En::MixerNode(rootGroup);
     mixerNode->addInput(massive2);
     mixerNode->addInput(ubermod1);
     //mixerNode->addInput(massive1);
     mixerNode->addInput(stutter1);
 
-    //En::Host host(vstNodes);
 
     En::HostThread* hostThread = new En::HostThread(mixerNode);
     hostThread->start();
 
-    MainWindow w1(massive1);
-    w1.show();
-
-    MainWindow w2(massive2);
-    w2.show();
-
-    MainWindow w3(ubermod1);
-    w3.show();
-
-    MainWindow stutterWindow(stutter1);
-    stutterWindow.show();
-
-//    MainWindow w4(krreverb1);
-//    w4.show();
-
-
-    En::MainWindow main;
+    En::MainWindow main(rootGroup);
     hostThread->connect(hostThread, SIGNAL(utilisation(float)), &main, SLOT(utilisation(float)));
     main.show();
 
@@ -87,11 +66,7 @@ int main(int argc, char*argv[])
     hostThread->wait();
     //qDebug() << "Host thread finished";
 
-    delete massive1;
-    delete massive2;
-    delete ubermod1;
-    delete stutter1;
-    //delete krreverb1;
+    delete rootGroup;
 
     return 0;
 }
