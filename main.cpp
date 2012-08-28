@@ -31,14 +31,18 @@ int main(int argc, char*argv[])
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Timeless 2.vst");
 
-    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
+    En::VstModule stutterModule("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
+    //En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
 
     En::VstNode* massive1 = new En::VstNode(&massiveModule);
     En::VstNode* massive2 = new En::VstNode(&massiveModule);
     En::VstNode* ubermod1 = new En::VstNode(&ubermodModule);
+    En::VstNode* stutter1 = new En::VstNode(&stutterModule);
+    //En::VstNode* krreverb1 = new En::VstNode(&reverbModule);
 
 
     ubermod1->setInput(massive1);
+    stutter1->setInput(massive1);
 
 
     //QVector<En::VstNode*> vstNodes;
@@ -48,6 +52,8 @@ int main(int argc, char*argv[])
     En::MixerNode* mixerNode = new En::MixerNode();
     mixerNode->addInput(massive2);
     mixerNode->addInput(ubermod1);
+    //mixerNode->addInput(massive1);
+    mixerNode->addInput(stutter1);
 
     //En::Host host(vstNodes);
 
@@ -63,10 +69,16 @@ int main(int argc, char*argv[])
     MainWindow w3(ubermod1);
     w3.show();
 
+    MainWindow stutterWindow(stutter1);
+    stutterWindow.show();
 
-//    QMainWindow other;
-//    other.setWindowTitle("Evilnote");
-//    other.show();
+//    MainWindow w4(krreverb1);
+//    w4.show();
+
+
+    En::MainWindow main;
+    hostThread->connect(hostThread, SIGNAL(utilisation(float)), &main, SLOT(utilisation(float)));
+    main.show();
 
     a.exec();
 
@@ -78,6 +90,8 @@ int main(int argc, char*argv[])
     delete massive1;
     delete massive2;
     delete ubermod1;
+    delete stutter1;
+    //delete krreverb1;
 
     return 0;
 }

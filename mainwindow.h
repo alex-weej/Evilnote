@@ -12,6 +12,11 @@
 #include "pluginterfaces/vst2.x/aeffectx.h"
 #include <algorithm>
 
+// bits for high res timing on Mach
+#include <CoreServices/CoreServices.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+
 
 
 
@@ -304,6 +309,10 @@ class Host : public QObject {
     Node* m_outputNode;
     unsigned m_blockSizeSamples;
 
+    // stuff for profiling utilisation
+    uint64_t m_lastProfiledTime;
+    uint64_t m_busyAccumulatedTime;
+
 public:
 
     Host(Node* outputNode)
@@ -311,7 +320,9 @@ public:
         , m_audioOutput(0)
         , m_timer(0)
         , m_globalSampleIndex(0)
-        , m_outputNode(outputNode) {
+        , m_outputNode(outputNode)
+        , m_lastProfiledTime(0)
+        , m_busyAccumulatedTime(0) {
         init();
     }
 
@@ -376,9 +387,27 @@ public slots:
 
     void writeData() {
 
+        if (m_lastProfiledTime != 0) {
+            uint64_t thisTime = mach_absolute_time();
+            uint64_t elapsed = thisTime - m_lastProfiledTime;
+            uint64_t elapsedNano = *(uint64_t*) &AbsoluteToNanoseconds( *(AbsoluteTime *) &elapsed );
+            if (elapsedNano > 2e8) {
+                uint64_t busyNano = *(uint64_t*) &AbsoluteToNanoseconds( *(AbsoluteTime *) &m_busyAccumulatedTime );
+                float utilisationAmount = (double)busyNano / elapsedNano;
+                emit utilisation(utilisationAmount);
+                m_lastProfiledTime = thisTime;
+                m_busyAccumulatedTime = 0;
+            }
+        } else {
+            m_lastProfiledTime = mach_absolute_time();
+        }
+
+
+
         if (!m_audioOutput || m_audioOutput->state() == QAudio::StoppedState) {
             return;
         }
+
 
         //qDebug() << "checking in writeData";
 
@@ -389,126 +418,165 @@ public slots:
 
 
         //qDebug() << "chunks" << chunks;
+        if (chunks > 0) {
 
-        int sampleRate = m_format.sampleRate();
+            uint64_t busyTimeStart = mach_absolute_time();
+
+            for (int i = 0; i < chunks; ++i) {
+            // generate a buffer and write it
 
 
-        float* shadowFloats[4];
-        for (int i = 0; i < 4; ++i) {
-            shadowFloats[i] = m_floatBlock[i].data();
-        }
 
-        // two stereo pairs
-        float** inputBlock = &shadowFloats[0];
-        float** outputBlock = &shadowFloats[2];
-
-        for (int i = 0; i < chunks; ++i) {
-        // generate a buffer and write it
-
-            // Temporary ppqPos implementation. This should be ultimately be coming from the sequencer.
-            s_vstTimeInfo.ppqPos = s_vstTimeInfo.samplePos / 44100 * s_vstTimeInfo.tempo / 60;
-            //qDebug() << "sample pos" << s_vstTimeInfo.samplePos;
-            //qDebug() << "ppq pos" << s_vstTimeInfo.ppqPos;
+                // Temporary ppqPos implementation. This should be ultimately be coming from the sequencer.
+                s_vstTimeInfo.ppqPos = s_vstTimeInfo.samplePos / 44100 * s_vstTimeInfo.tempo / 60;
+                //qDebug() << "sample pos" << s_vstTimeInfo.samplePos;
+                //qDebug() << "ppq pos" << s_vstTimeInfo.ppqPos;
 
 
 
 
-            Node* outputNode = m_outputNode;
+                Node* outputNode = m_outputNode;
 
 
-            // might need to strip out all the heap stuff in here to make this more efficient?
-            struct Dispatcher {
-                QVector<QVector<float> > process(Node* node, unsigned blockSize) {
+                // might need to strip out all the heap stuff in here to make this more efficient?
+                struct Dispatcher {
 
-                    // initialise our output to zeros.
-                    QVector<QVector<float> > outputBlocks(2);
-                    for (int channel = 0; channel < 2; ++channel) {
-                        outputBlocks[channel].resize(blockSize);
-                    }
+                    typedef QVector<QVector<float> > FloatChannels;
 
-                    MixerNode* mixerNode = node->mixerNode();
-                    if (mixerNode) {
-                        for (int input = 0; input < mixerNode->numInputs(); ++input) {
-                            QVector<QVector<float> > thisOutputBlocks = this->process(mixerNode->input(input), blockSize);
-                            for (int channel = 0; channel < 2; ++channel) {
-                                for (int sample = 0; sample < blockSize; ++sample) {
-                                    outputBlocks[channel][sample] += thisOutputBlocks[channel][sample];
+                    typedef QMap<Node*, FloatChannels> nodeBlocksMap_t;
+                    nodeBlocksMap_t m_nodeBlocksMap;
+
+                    FloatChannels process(Node* node, unsigned blockSize) {
+
+
+                        nodeBlocksMap_t::iterator it = m_nodeBlocksMap.find(node);
+                        if (it != m_nodeBlocksMap.end()) {
+                            // already calculated this mofo.
+                            return it.value();
+                        }
+
+
+
+                        // initialise our output to zeros.
+                        FloatChannels outputBlocks(2);
+                        for (int channel = 0; channel < 2; ++channel) {
+                            outputBlocks[channel].resize(blockSize);
+                        }
+
+                        do {
+
+                            MixerNode* mixerNode = node->mixerNode();
+                            if (mixerNode) {
+                                for (int input = 0; input < mixerNode->numInputs(); ++input) {
+                                    FloatChannels thisOutputBlocks = this->process(mixerNode->input(input), blockSize);
+                                    for (int channel = 0; channel < 2; ++channel) {
+                                        for (int sample = 0; sample < blockSize; ++sample) {
+                                            outputBlocks[channel][sample] += thisOutputBlocks[channel][sample];
+                                        }
+                                    }
                                 }
+                                break;
                             }
-                        }
+
+                            VstNode* vstNode = node->vstNode();
+                            if (vstNode) {
+                                FloatChannels inputBlocks(2);
+                                if (vstNode->input()) {
+                                    inputBlocks = this->process(vstNode->input(), blockSize);
+                                } else {
+                                    for (int channel = 0; channel < 2; ++channel) {
+                                        inputBlocks[channel].resize(blockSize); // will be zero filled.
+                                    }
+                                }
+
+                                const float* inputFloats[2];
+                                float* outputFloats[2];
+                                for (int i = 0; i < 2; ++i) {
+                                    inputFloats[i] = inputBlocks[i].constData();
+                                    outputFloats[i] = outputBlocks[i].data();
+                                }
+
+                                vstNode->processEvents();
+                                vstNode->vstInstance()->processReplacing(vstNode->vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
+                                break;
+
+                            }
+
+                            // unknown node type!
+                            Q_ASSERT(false);
+
+                        } while (0);
+
+    //                    // peak detection
+    //                    double peak[2] = {0., 0.};
+    //                    double rmsAccum[2] = {0., 0.};
+    //                    for (int channel = 0; channel < 2; ++channel) {
+    //                        for (int sample = 0; sample < blockSize; ++sample) {
+    //                            float thisSample = outputBlocks[channel][]
+    //                        }
+    //                    }
+
+
+                        m_nodeBlocksMap.insert(node, outputBlocks);
                         return outputBlocks;
                     }
+                } dispatcher;
 
-                    VstNode* vstNode = node->vstNode();
-                    if (vstNode) {
-                        QVector<QVector<float> > inputBlocks(2);
-                        if (vstNode->input()) {
-                            inputBlocks = this->process(vstNode->input(), blockSize);
-                        } else {
-                            for (int channel = 0; channel < 2; ++channel) {
-                                inputBlocks[channel].resize(blockSize); // will be zero filled.
-                            }
-                        }
+                QVector<QVector<float> > outputBlocks = dispatcher.process(outputNode, m_blockSizeSamples);
 
-                        const float* inputFloats[2];
-                        float* outputFloats[2];
-                        for (int i = 0; i < 2; ++i) {
-                            inputFloats[i] = inputBlocks[i].constData();
-                            outputFloats[i] = outputBlocks[i].data();
-                        }
+                // convert float data buffers to our audio format
 
-                        vstNode->processEvents();
-                        vstNode->vstInstance()->processReplacing(vstNode->vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
-                        return outputBlocks;
+                qint16* ptr = (qint16*)m_buffer.data();
+
+                for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
+                    for (int channel = 0; channel < m_format.channelCount(); ++channel) {
+                        float clamped = std::min(std::max(outputBlocks[channel][sampleIndex], -1.f), 1.f);
+                        *ptr++ = qint16(clamped * 32767);
                     }
-
-                    // unknown node type!
-                    Q_ASSERT(false);
-
-                    return outputBlocks;
                 }
-            } dispatcher;
 
-            QVector<QVector<float> > outputBlocks = dispatcher.process(outputNode, m_blockSizeSamples);
 
-            // convert float data buffers to our audio format
+                //qDebug("writing buffer");
+                qint64 written = m_ioDevice->write(m_buffer.data(), m_buffer.size());
+                //m_ioDevice->waitForBytesWritten(-1);
+                //qDebug("%lld bytes written!", written);
 
-            qint16* ptr = (qint16*)m_buffer.data();
+                //qDebug() << "error state" << m_audioOutput->error() << QAudio::NoError;
 
-            for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
-                for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                    float clamped = std::min(std::max(outputBlocks[channel][sampleIndex], -1.f), 1.f);
-                    *ptr++ = qint16(clamped * 32767);
-                }
+                // update vst time info struct
+                s_vstTimeInfo.samplePos += m_blockSizeSamples;
             }
 
+            //quint64 elapsedBusy = m_profileTimer.restart();
+            //qDebug() << "Host was busy for" << elapsedBusy << "ms";
+            m_busyAccumulatedTime += (mach_absolute_time() - busyTimeStart);
 
-            //qDebug("writing buffer");
-            qint64 written = m_ioDevice->write(m_buffer.data(), m_buffer.size());
-            //m_ioDevice->waitForBytesWritten(-1);
-            //qDebug("%lld bytes written!", written);
-
-            //qDebug() << "error state" << m_audioOutput->error() << QAudio::NoError;
-
-            // update vst time info struct
-            s_vstTimeInfo.samplePos += m_blockSizeSamples;
+        } else {
+            // do nothing.
         }
+
 
         m_timer->start();
     }
 
     void notified()
     {
-        qWarning() << "bytesFree = " << m_audioOutput->bytesFree()
-                   << ", " << "elapsedUSecs = " << m_audioOutput->elapsedUSecs()
-                   << ", " << "processedUSecs = " << m_audioOutput->processedUSecs();
+//        qWarning() << "bytesFree = " << m_audioOutput->bytesFree()
+//                   << ", " << "elapsedUSecs = " << m_audioOutput->elapsedUSecs()
+//                   << ", " << "processedUSecs = " << m_audioOutput->processedUSecs();
     }
+
+signals:
+    void utilisation(float);
 
 };
 
 
 
 class HostThread : public QThread {
+
+    Q_OBJECT
+
     //QVector<VstNode*> m_vstNodes;
     Node* m_outputNode;
     Host* m_host;
@@ -517,15 +585,50 @@ public:
 
     }
 
-    void run() {
-        m_host = new Host(m_outputNode);
-
-        QThread::exec();
-    }
-
     virtual ~HostThread() {
         m_host->stop();
     }
+
+    void run() {
+        m_host = new Host(m_outputNode);
+        connect(m_host, SIGNAL(utilisation(float)), SIGNAL(utilisation(float)));
+        QThread::exec();
+    }
+
+signals:
+    void utilisation(float);
+};
+
+
+class MainWindow: public QMainWindow {
+
+    Q_OBJECT
+
+    QProgressBar* m_utilisationMeter;
+
+public:
+
+    MainWindow(QWidget* parent=0)
+        : QMainWindow(parent) {
+
+        setWindowTitle("Evilnote");
+
+        //QVBoxLayout* mainLayout = new QVBoxLayout(this);
+
+        m_utilisationMeter = new QProgressBar(this);
+        m_utilisationMeter->setRange(0, INT_MAX);
+
+        //mainLayout->addWidget(m_utilisationMeter);
+        setCentralWidget(m_utilisationMeter);
+
+    }
+
+public slots:
+
+    void utilisation(float utilisationAmount) {
+        m_utilisationMeter->setValue(utilisationAmount * INT_MAX);
+    }
+
 };
 
 
