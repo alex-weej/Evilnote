@@ -174,6 +174,6 @@ void MainWindow::on_showEditorButton_toggled(bool checked)
 
 namespace En {
 
-VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstTimeSigValid | kVstTempoValid};
+VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstPpqPosValid | kVstTimeSigValid | kVstTempoValid};
 
 }

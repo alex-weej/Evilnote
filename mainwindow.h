@@ -147,26 +147,67 @@ private:
 
 };
 
+class Node;
+class VstNode;
+class MixerNode;
 
+class Node: public QObject {
+    Q_OBJECT
+public:
+    virtual MixerNode* mixerNode() {
+        return 0;
+    }
+    virtual VstNode* vstNode() {
+        return 0;
+    }
+};
 
-class VstNode : public QObject {
+class MixerNode: public Node {
+    Q_OBJECT
+    QVector<Node*> m_inputs;
+public:
+    virtual MixerNode* mixerNode() {
+        return this;
+    }
+
+    void addInput(Node* node) {
+        m_inputs.push_back(node);
+    }
+
+    unsigned numInputs() {
+        return m_inputs.size();
+    }
+
+    Node* input(int i) {
+        return m_inputs[i];
+    }
+
+};
+
+class VstNode : public Node {
     Q_OBJECT
 
     AEffect* m_vstInstance;
     QMutex m_eventQueueMutex;
     QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
+    VstNode* m_input;
 
 public:
     //VstNode(AEffect* vstInstance) : m_vstInstance(vstInstance) {
     VstNode(VstModule* vstModule)
         : m_vstInstance(vstModule->createVstInstance())
-        , m_eventQueueWriteIndex(0) {
+        , m_eventQueueWriteIndex(0)
+        , m_input(0) {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
         m_vstInstance->dispatcher (m_vstInstance, effOpen, 0, 0, 0, 0);
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
         m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, 512, 0, 0);
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
+    }
+
+    virtual VstNode* vstNode() {
+        return this;
     }
 
     AEffect* vstInstance() const {
@@ -215,6 +256,14 @@ public:
         }
     }
 
+    void setInput(VstNode* vstNode) {
+        m_input = vstNode;
+    }
+
+    VstNode* input() {
+        return m_input;
+    }
+
 
 };
 
@@ -252,17 +301,17 @@ class Host : public QObject {
     QAudioOutput* m_audioOutput;
     QTimer* m_timer;
     unsigned long m_globalSampleIndex;
-    QVector<En::VstNode*> m_vstNodes;
+    Node* m_outputNode;
     unsigned m_blockSizeSamples;
 
 public:
 
-    Host(const QVector<En::VstNode*>& vstNodes)
+    Host(Node* outputNode)
         : m_ioDevice(0)
         , m_audioOutput(0)
         , m_timer(0)
         , m_globalSampleIndex(0)
-        , m_vstNodes(vstNodes) {
+        , m_outputNode(outputNode) {
         init();
     }
 
@@ -356,18 +405,71 @@ public slots:
         for (int i = 0; i < chunks; ++i) {
         // generate a buffer and write it
 
+            // Temporary ppqPos implementation. This should be ultimately be coming from the sequencer.
+            s_vstTimeInfo.ppqPos = s_vstTimeInfo.samplePos / 44100 * s_vstTimeInfo.tempo / 60;
+            //qDebug() << "sample pos" << s_vstTimeInfo.samplePos;
+            //qDebug() << "ppq pos" << s_vstTimeInfo.ppqPos;
 
-            // for each plugin in turn
-            for (int j = 0; j < 2; ++j) {
-
-                VstNode* vstNode = m_vstNodes[j];
 
 
-                vstNode->processEvents();
-                vstNode->vstInstance()->processReplacing (vstNode->vstInstance(), inputBlock, outputBlock, m_blockSizeSamples);
 
-                std::swap(inputBlock, outputBlock);
-            }
+            Node* outputNode = m_outputNode;
+
+
+            // might need to strip out all the heap stuff in here to make this more efficient?
+            struct Dispatcher {
+                QVector<QVector<float> > process(Node* node, unsigned blockSize) {
+
+                    // initialise our output to zeros.
+                    QVector<QVector<float> > outputBlocks(2);
+                    for (int channel = 0; channel < 2; ++channel) {
+                        outputBlocks[channel].resize(blockSize);
+                    }
+
+                    MixerNode* mixerNode = node->mixerNode();
+                    if (mixerNode) {
+                        for (int input = 0; input < mixerNode->numInputs(); ++input) {
+                            QVector<QVector<float> > thisOutputBlocks = this->process(mixerNode->input(input), blockSize);
+                            for (int channel = 0; channel < 2; ++channel) {
+                                for (int sample = 0; sample < blockSize; ++sample) {
+                                    outputBlocks[channel][sample] += thisOutputBlocks[channel][sample];
+                                }
+                            }
+                        }
+                        return outputBlocks;
+                    }
+
+                    VstNode* vstNode = node->vstNode();
+                    if (vstNode) {
+                        QVector<QVector<float> > inputBlocks(2);
+                        if (vstNode->input()) {
+                            inputBlocks = this->process(vstNode->input(), blockSize);
+                        } else {
+                            for (int channel = 0; channel < 2; ++channel) {
+                                inputBlocks[channel].resize(blockSize); // will be zero filled.
+                            }
+                        }
+
+                        const float* inputFloats[2];
+                        float* outputFloats[2];
+                        for (int i = 0; i < 2; ++i) {
+                            inputFloats[i] = inputBlocks[i].constData();
+                            outputFloats[i] = outputBlocks[i].data();
+                        }
+
+                        vstNode->processEvents();
+                        vstNode->vstInstance()->processReplacing(vstNode->vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
+                        return outputBlocks;
+                    }
+
+                    // unknown node type!
+                    Q_ASSERT(false);
+
+                    return outputBlocks;
+                }
+            } dispatcher;
+
+            QVector<QVector<float> > outputBlocks = dispatcher.process(outputNode, m_blockSizeSamples);
 
             // convert float data buffers to our audio format
 
@@ -375,7 +477,7 @@ public slots:
 
             for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
                 for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                    float clamped = std::min(std::max(inputBlock[channel][sampleIndex], -1.f), 1.f);
+                    float clamped = std::min(std::max(outputBlocks[channel][sampleIndex], -1.f), 1.f);
                     *ptr++ = qint16(clamped * 32767);
                 }
             }
@@ -390,7 +492,6 @@ public slots:
 
             // update vst time info struct
             s_vstTimeInfo.samplePos += m_blockSizeSamples;
-            qDebug() << "sample pos" << s_vstTimeInfo.samplePos;
         }
 
         m_timer->start();
@@ -408,15 +509,16 @@ public slots:
 
 
 class HostThread : public QThread {
-    QVector<VstNode*> m_vstNodes;
+    //QVector<VstNode*> m_vstNodes;
+    Node* m_outputNode;
     Host* m_host;
 public:
-    HostThread(const QVector<VstNode*>& vstNodes) : m_vstNodes(vstNodes), m_host(0) {
+    HostThread(Node* outputNode) : m_outputNode(outputNode), m_host(0) {
 
     }
 
     void run() {
-        m_host = new Host(m_vstNodes);
+        m_host = new Host(m_outputNode);
 
         QThread::exec();
     }

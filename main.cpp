@@ -22,38 +22,51 @@ int main(int argc, char*argv[])
 
     //vstFileName = "/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst";
 
-    En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Massive.vst");
+    En::VstModule massiveModule("/Library/Audio/Plug-Ins/VST/Massive.vst");
+    //En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Omnisphere.vst");
+    //En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/CurveCM.vst");
     //En::VstModule vstModule1("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst");
     //En::VstModule vstModule2("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/ArtsAcousticReverb.vst");
-    En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
+    En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Timeless 2.vst");
 
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
 
-    En::VstNode* vstNode1 = new En::VstNode(&vstModule1);
-    En::VstNode* vstNode2 = new En::VstNode(&vstModule2);
+    En::VstNode* massive1 = new En::VstNode(&massiveModule);
+    En::VstNode* massive2 = new En::VstNode(&massiveModule);
+    En::VstNode* ubermod1 = new En::VstNode(&ubermodModule);
 
 
-    QVector<En::VstNode*> vstNodes;
-    vstNodes.push_back(vstNode1);
-    vstNodes.push_back(vstNode2);
+    ubermod1->setInput(massive1);
+
+
+    //QVector<En::VstNode*> vstNodes;
+    //vstNodes.push_back(massive1);
+    //vstNodes.push_back(ubermodModule1);
+
+    En::MixerNode* mixerNode = new En::MixerNode();
+    mixerNode->addInput(massive2);
+    mixerNode->addInput(ubermod1);
 
     //En::Host host(vstNodes);
 
-    En::HostThread* hostThread = new En::HostThread(vstNodes);
+    En::HostThread* hostThread = new En::HostThread(mixerNode);
     hostThread->start();
 
-    MainWindow w1(vstNode1);
+    MainWindow w1(massive1);
     w1.show();
 
-    MainWindow w2(vstNode2);
+    MainWindow w2(massive2);
     w2.show();
 
+    MainWindow w3(ubermod1);
+    w3.show();
 
-    QMainWindow other;
-    other.setWindowTitle("Evilnote");
-    other.show();
+
+//    QMainWindow other;
+//    other.setWindowTitle("Evilnote");
+//    other.show();
 
     a.exec();
 
@@ -62,8 +75,9 @@ int main(int argc, char*argv[])
     hostThread->wait();
     //qDebug() << "Host thread finished";
 
-    delete vstNode1;
-    delete vstNode2;
+    delete massive1;
+    delete massive2;
+    delete ubermod1;
 
     return 0;
 }
