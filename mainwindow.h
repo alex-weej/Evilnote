@@ -68,6 +68,10 @@ inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index,
             result = kVstProcessLevelUser;
             break;
 
+        default:
+            //qDebug() << "UNHANDLED HOST OPCODE" << opcode;
+            break;
+
     }
 
     return result;
@@ -171,11 +175,7 @@ class NodeGroup: public QObject {
 
 public:
 
-    virtual ~NodeGroup() {
-        Q_FOREACH (Node* node, m_nodes) {
-            delete node;
-        }
-    }
+    virtual ~NodeGroup();
 
     void addChildNode(Node* node) {
         m_nodes.push_back(node);
@@ -197,53 +197,140 @@ class Node: public QObject {
 
     NodeGroup* m_nodeGroup;
 
+protected:
+
+    class ChannelData {
+    public:
+        QString name;
+        QVector<float> buffer;
+
+        ChannelData(const QString& name, size_t bufferSize)
+            : name(name)
+            , buffer(bufferSize) {}
+
+        // why the fuck is this necessary to use ChannelData in a QVector?
+        ChannelData() {}
+
+    };
+
+    QVector<ChannelData> m_inputChannelData; // WARNING: unused buffer ATM
+    QVector<ChannelData> m_outputChannelData;
+
 public:
+
+    static int blockSize() {
+        return 512;
+    }
+
+    struct Visitor {
+        virtual void visit(Node* node) {}
+        virtual void visit(VstNode* node);
+        virtual void visit(MixerNode* node);
+    };
+
+    static const float* s_nullInputBuffer;
 
     Node(NodeGroup* nodeGroup)
         : m_nodeGroup(nodeGroup) {
         nodeGroup->addChildNode(this);
     }
 
-    virtual MixerNode* mixerNode() {
-        return 0;
+    virtual void accept(Visitor&) {}
+
+    unsigned numInputChannels() const {
+        return m_inputChannelData.count();
     }
 
-    virtual VstNode* vstNode() {
-        return 0;
+    unsigned numOutputChannels() const {
+        return m_outputChannelData.count();
     }
+
+    float* outputChannelBuffer(int channelIndex) {
+        return m_outputChannelData[channelIndex].buffer.data();
+    }
+
+    const float* outputChannelBufferConst(int channelIndex) {
+        return m_outputChannelData[channelIndex].buffer.constData();
+    }
+
+    virtual QString displayLabel() const = 0;
 
 };
+
 
 class MixerNode: public Node {
 
     Q_OBJECT
 
     QVector<Node*> m_inputs;
+    //QVector<QVector<float> > m_outputChannelBuffers;
 
 public:
 
     MixerNode(NodeGroup* nodeGroup)
-            : Node(nodeGroup) {}
+            : Node(nodeGroup) {
 
-    virtual MixerNode* mixerNode() {
-        return this;
+
+        m_outputChannelData << ChannelData("Mix L", blockSize());
+        m_outputChannelData << ChannelData("Mix R", blockSize());
+
     }
+
 
     void addInput(Node* node) {
-        m_inputs.push_back(node);
+        m_inputs << node;
+        inputsChanged();
     }
 
-    unsigned numInputs() {
+
+    void inputsChanged() {
+        m_inputChannelData.clear();
+        for (int i = 0; i < numInputs(); ++i) {
+            for (int c = 0; c < 2; ++c) {
+                m_inputChannelData << ChannelData(QString("In %1 %2").arg(QString::number(i), QString(c == 0 ? "L" : "R")), blockSize());
+            }
+        }
+    }
+
+    unsigned numInputs() const {
         return m_inputs.size();
     }
 
-    Node* input(int i) {
+    Node* input(int i) const {
         return m_inputs[i];
+    }
+
+    virtual void accept(Visitor& visitor) {
+        visitor.visit(this);
+    }
+
+    virtual QString displayLabel() const {
+        return tr("Mixer");
+    }
+
+    virtual void processAudio() {
+
+        // zero the result
+        for (int c = 0; c < 2; ++c) {
+            for (int s = 0; s < blockSize(); ++s) {
+                outputChannelBuffer(c)[s] = 0;
+            }
+        }
+
+        // accumulate
+        for (int i = 0; i < numInputs(); ++i) {
+            for (int c = 0; c < 2; ++c) {
+                for (int s = 0; s < blockSize(); ++s) {
+                    outputChannelBuffer(c)[s] += input(i)->outputChannelBufferConst(c)[s];
+                }
+            }
+        }
+
     }
 
 };
 
-class VstNode : public Node {
+class VstNode: public Node {
 
     Q_OBJECT
 
@@ -252,6 +339,8 @@ class VstNode : public Node {
     QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
     VstNode* m_input;
+    QString m_productName;
+
 
 public:
 
@@ -261,9 +350,76 @@ public:
         , m_eventQueueWriteIndex(0)
         , m_input(0) {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
+
+        const size_t blockSize = 512;
+
         m_vstInstance->dispatcher (m_vstInstance, effOpen, 0, 0, 0, 0);
+
+        int ret = 0;
+        char charBuffer[64] = {0};
+        ret = m_vstInstance->dispatcher (m_vstInstance, effGetProductString, 0, 0, &charBuffer, 0);
+        if (ret) {
+            m_productName = QString(charBuffer);
+        } else {
+            m_productName = tr("Untitled");
+        }
+
+
+        VstPinProperties pinProps;
+
+        qDebug() << "output props for vst" << m_productName;
+
+        int pin;
+        const int maxPins = 128;
+        for (pin = 0; pin < maxPins; ++pin) {
+            int ret = m_vstInstance->dispatcher (m_vstInstance, effGetInputProperties, pin, 0, &pinProps, 0);
+            if (ret == 1) {
+                qDebug() << "Input pin" << pin << pinProps.label << pinProps.flags;
+                m_inputChannelData << ChannelData(pinProps.label, blockSize);
+            } else {
+                break;
+            }
+        }
+
+        for (pin = 0; pin < maxPins; ++pin) {
+            int ret = m_vstInstance->dispatcher (m_vstInstance, effGetOutputProperties, pin, 0, &pinProps, 0);
+            if (ret == 1) {
+                qDebug() << "Output pin" << pin << pinProps.label << pinProps.flags;
+                m_outputChannelData << ChannelData(pinProps.label, blockSize);
+            } else {
+                break;
+            }
+        }
+
+        qDebug() << "inputs:" << numInputChannels();
+        qDebug() << "outputs:" << numOutputChannels();
+
+//        VstSpeakerArrangement inputSpeakerArr = {kSpeakerArrStereo, 2};
+//        VstSpeakerArrangement outputSpeakerArr = {kSpeakerArrStereo, 2};
+
+//        VstSpeakerArrangement *in = 0, *out = 0;
+
+
+//        qDebug() << "Setting speaker arrangements and shit";
+
+//        int ret = m_vstInstance->dispatcher (m_vstInstance, effGetSpeakerArrangement, 0, (VstIntPtr)&in, &out, 0);
+
+//        if (in) {
+//            qDebug() << "initial speaker arrangement: ret" << ret << "inputs" << in->numChannels << "outputs" << out->numChannels;
+//        }
+
+//        ret = m_vstInstance->dispatcher (m_vstInstance, effSetSpeakerArrangement, 0, (VstIntPtr)&inputSpeakerArr, &outputSpeakerArr, 0);
+
+//        ret = m_vstInstance->dispatcher (m_vstInstance, effGetSpeakerArrangement, 0, (VstIntPtr)&in, &out, 0);
+
+//        if (in) {
+//            qDebug() << "new speaker arrangement: ret" << ret << "inputs" << in->numChannels << "outputs" << out->numChannels;
+//        }
+
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
-        m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, 512, 0, 0);
+
+        m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, blockSize, 0, 0);
+
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
     }
 
@@ -283,6 +439,17 @@ public:
         m_vstInstance = 0;
     }
 
+    const QString& productName() const {
+        return m_productName;
+    }
+
+    virtual QString displayLabel() const {
+        return tr("VST %1").arg(productName());
+    }
+
+    virtual void accept(Visitor& visitor) {
+        visitor.visit(this);
+    }
 
     void queueEvent(VstEvent* event) {
         QMutexLocker locker(&m_eventQueueMutex);
@@ -315,6 +482,38 @@ public:
             }
 
         }
+    }
+
+    void processAudio() {
+
+        const int blockSize = 512; // temp hack!
+
+        int numInputOutputChannels = 0;
+        if (input()) {
+            numInputOutputChannels = input()->numOutputChannels();
+        }
+
+        int numInputChannels = this->numInputChannels();
+
+        const float* inputFloats[numInputChannels];
+
+        for (int c = 0; c < numInputChannels; ++c) {
+            if (c < numInputOutputChannels) {
+                inputFloats[c] = input()->outputChannelBufferConst(c);
+            } else {
+                inputFloats[c] = s_nullInputBuffer;
+            }
+        }
+
+        int numOutputChannels = this->numOutputChannels();
+
+        float* outputFloats[numOutputChannels];
+
+        for (int c = 0; c < numOutputChannels; ++c) {
+            outputFloats[c] = outputChannelBuffer(c);
+        }
+
+        vstInstance()->processReplacing(vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
     }
 
     void setInput(VstNode* vstNode) {
@@ -351,14 +550,14 @@ public:
 
 
 
-class Host : public QObject {
+class Host: public QObject {
 
     Q_OBJECT
 
     QIODevice* m_ioDevice; // not owned
     QAudioFormat m_format;
-    QByteArray m_buffer;
-    QVector<float> m_floatBlock[4]; // 2 in 2 out
+    QByteArray m_buffer; // PCM audio buffer
+    //QVector<float> m_floatBlock[4]; // 2 in 2 out
     QAudioOutput* m_audioOutput;
     QTimer* m_timer;
     unsigned long m_globalSampleIndex;
@@ -368,6 +567,8 @@ class Host : public QObject {
     // stuff for profiling utilisation
     uint64_t m_lastProfiledTime;
     uint64_t m_busyAccumulatedTime;
+
+    QVector<float> m_nullInputBuffer;
 
 public:
 
@@ -415,8 +616,12 @@ public:
         m_blockSizeSamples = m_audioOutput->periodSize() / m_format.channelCount() / (m_format.sampleSize() / 8);
         qDebug() << "block size (samples)" << m_blockSizeSamples;
 
-        for (int i = 0; i < 4; ++i)
-            m_floatBlock[i].resize(m_blockSizeSamples);
+
+        m_nullInputBuffer.resize(m_blockSizeSamples);
+        Node::s_nullInputBuffer = nullInputBuffer();
+
+        //for (int i = 0; i < 4; ++i)
+        //    m_floatBlock[i].resize(m_blockSizeSamples);
 
         m_buffer.resize(m_audioOutput->periodSize());
 
@@ -432,6 +637,11 @@ public:
 
     void stop() {
         m_timer->stop();
+    }
+
+
+    const float* nullInputBuffer() const {
+        return m_nullInputBuffer.constData();
     }
 
 
@@ -494,91 +704,227 @@ public slots:
                 Node* outputNode = m_outputNode;
 
 
-                // might need to strip out all the heap stuff in here to make this more efficient?
-                struct Dispatcher {
-
-                    typedef QVector<QVector<float> > FloatChannels;
-
-                    typedef QMap<Node*, FloatChannels> nodeBlocksMap_t;
-                    nodeBlocksMap_t m_nodeBlocksMap;
-
-                    FloatChannels process(Node* node, unsigned blockSize) {
 
 
-                        nodeBlocksMap_t::iterator it = m_nodeBlocksMap.find(node);
-                        if (it != m_nodeBlocksMap.end()) {
-                            // already calculated this mofo.
-                            return it.value();
+//                // might need to strip out all the heap stuff in here to make this more efficient?
+//                struct Dispatcher {
+
+//                    typedef QVector<QVector<float> > FloatChannels;
+
+//                    typedef QMap<Node*, FloatChannels> nodeBlocksMap_t;
+//                    nodeBlocksMap_t m_nodeBlocksMap;
+
+//                    Host* host;
+
+
+//                    Dispatcher(Host* host) : host(host) {}
+
+//                    FloatChannels process(Node* node, unsigned blockSize) {
+
+
+//                        nodeBlocksMap_t::iterator it = m_nodeBlocksMap.find(node);
+//                        if (it != m_nodeBlocksMap.end()) {
+//                            // already calculated this mofo.
+//                            return it.value();
+//                        }
+
+
+
+
+
+//                        // initialise our output to zeros.
+//                        FloatChannels outputBlocks(numChannels);
+//                        for (int channel = 0; channel < numChannels; ++channel) {
+//                            outputBlocks[channel].resize(blockSize);
+//                        }
+
+//                        do {
+
+//                            MixerNode* mixerNode = node->mixerNode();
+//                            if (mixerNode) {
+//                                for (int input = 0; input < mixerNode->numInputs(); ++input) {
+//                                    FloatChannels thisOutputBlocks = this->process(mixerNode->input(input), blockSize);
+//                                    for (int channel = 0; channel < numChannels; ++channel) {
+//                                        for (int sample = 0; sample < blockSize; ++sample) {
+//                                            outputBlocks[channel][sample] += thisOutputBlocks[channel][sample];
+//                                        }
+//                                    }
+//                                }
+//                                break;
+//                            }
+
+//                            VstNode* vstNode = node->vstNode();
+//                            if (vstNode) {
+
+//                                const int numInputChannels = vstNode->numInputChannels();
+//                                const int numOutputChannels = vstNode->numOutputChannels();
+
+//                                FloatChannels inputBlocks;
+//                                if (vstNode->input()) {
+//                                    inputBlocks = this->process(vstNode->input(), blockSize);
+//                                }
+
+//                                const float* inputFloats[numInputChannels];
+
+//                                for (int channel = 0; channel < numInputChannels; ++channel) {
+//                                    if (channel < inputBlocks.size()) {
+//                                        inputFloats[channel] = inputBlocks[channel].constData();
+//                                    } else {
+//                                        inputFloats[channel] = this->host->nullInputBuffer();
+//                                    }
+//                                }
+
+//                                float* outputFloats[numOutputChannels];
+//                                for (int channel = 0; channel < numOutputChannels; ++channel) {
+//                                    outputFloats[channel] = vstNode->outputChannelBuffer(channel);
+//                                }
+
+//                                vstNode->processEvents();
+//                                vstNode->vstInstance()->processReplacing(vstNode->vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
+//                                break;
+
+//                            }
+
+//                            // unknown node type!
+//                            Q_ASSERT(false);
+
+//                        } while (0);
+
+//    //                    // peak detection
+//    //                    double peak[2] = {0., 0.};
+//    //                    double rmsAccum[2] = {0., 0.};
+//    //                    for (int channel = 0; channel < 2; ++channel) {
+//    //                        for (int sample = 0; sample < blockSize; ++sample) {
+//    //                            float thisSample = outputBlocks[channel][]
+//    //                        }
+//    //                    }
+
+
+//                        m_nodeBlocksMap.insert(node, outputBlocks);
+//                        return outputBlocks;
+//                    }
+//                } dispatcher(this);
+
+                //QVector<QVector<float> > outputBlocks = dispatcher.process(outputNode, m_blockSizeSamples);
+
+//                QVector<QVector<float> > outputBlocks(2);
+//                for (int i = 0; i < 2; ++i) {
+//                    outputBlocks[i].resize(m_blockSizeSamples);
+//                }
+
+
+                //QMap<Node*, QSet<Node*> > dependencyMap;
+                //QMap<Node*, QSet<Node*> > dependentMap;
+
+                struct DependencyVisitor: public Node::Visitor {
+
+
+                    typedef QMap<Node*, QSet<Node*> > NodeRelationMap;
+
+                    // any need to have these separate? could be a QPair?
+                    NodeRelationMap dependencyMap;
+                    NodeRelationMap dependentMap;
+
+                    void visitRecurse(Node* node) {
+                        //qDebug() << "VisitRecurse Node*" << node->displayLabel();
+                        if (dependencyMap.contains(node)) {
+                            return;
                         }
-
-
-
-                        // initialise our output to zeros.
-                        FloatChannels outputBlocks(2);
-                        for (int channel = 0; channel < 2; ++channel) {
-                            outputBlocks[channel].resize(blockSize);
-                        }
-
-                        do {
-
-                            MixerNode* mixerNode = node->mixerNode();
-                            if (mixerNode) {
-                                for (int input = 0; input < mixerNode->numInputs(); ++input) {
-                                    FloatChannels thisOutputBlocks = this->process(mixerNode->input(input), blockSize);
-                                    for (int channel = 0; channel < 2; ++channel) {
-                                        for (int sample = 0; sample < blockSize; ++sample) {
-                                            outputBlocks[channel][sample] += thisOutputBlocks[channel][sample];
-                                        }
-                                    }
-                                }
-                                break;
-                            }
-
-                            VstNode* vstNode = node->vstNode();
-                            if (vstNode) {
-                                FloatChannels inputBlocks(2);
-                                if (vstNode->input()) {
-                                    inputBlocks = this->process(vstNode->input(), blockSize);
-                                } else {
-                                    for (int channel = 0; channel < 2; ++channel) {
-                                        inputBlocks[channel].resize(blockSize); // will be zero filled.
-                                    }
-                                }
-
-                                const float* inputFloats[2];
-                                float* outputFloats[2];
-                                for (int i = 0; i < 2; ++i) {
-                                    inputFloats[i] = inputBlocks[i].constData();
-                                    outputFloats[i] = outputBlocks[i].data();
-                                }
-
-                                vstNode->processEvents();
-                                vstNode->vstInstance()->processReplacing(vstNode->vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
-                                break;
-
-                            }
-
-                            // unknown node type!
-                            Q_ASSERT(false);
-
-                        } while (0);
-
-    //                    // peak detection
-    //                    double peak[2] = {0., 0.};
-    //                    double rmsAccum[2] = {0., 0.};
-    //                    for (int channel = 0; channel < 2; ++channel) {
-    //                        for (int sample = 0; sample < blockSize; ++sample) {
-    //                            float thisSample = outputBlocks[channel][]
-    //                        }
-    //                    }
-
-
-                        m_nodeBlocksMap.insert(node, outputBlocks);
-                        return outputBlocks;
+                        dependencyMap[node];
+                        dependentMap[node];
+                        node->accept(*this);
                     }
-                } dispatcher;
 
-                QVector<QVector<float> > outputBlocks = dispatcher.process(outputNode, m_blockSizeSamples);
+                    void visit(VstNode* vstNode) {
+                        //qDebug() << "Visiting VstNode*" << vstNode->displayLabel();
+                        Node* input = vstNode->input();
+                        if (input) {
+                            dependencyMap[static_cast<Node*>(vstNode)] << input;
+                            dependentMap[input] << static_cast<Node*>(vstNode);
+                            visitRecurse(input);
+                        }
+                    }
+
+                    void visit(MixerNode* mixerNode) {
+                        //qDebug() << "Visiting MixerNode*" << mixerNode->displayLabel();
+                        for (unsigned i = 0; i < mixerNode->numInputs(); ++i) {
+                            Node* input = mixerNode->input(i);
+                            dependencyMap[static_cast<Node*>(mixerNode)] << input;
+                            dependentMap[input] << static_cast<Node*>(mixerNode);
+                            visitRecurse(input);
+                        }
+                    }
+
+                } dependencyVisitor;
+
+                dependencyVisitor.visitRecurse(outputNode);
+                //outputNode->accept(dependencyVisitor);
+                // TODO: fix the above so it only happens when the graph changes. no need to recalculate dependencies on every single buffer generation
+
+
+                //qApp->exit();
+
+                struct SerialNodeExecutor: public Node::Visitor {
+
+                    DependencyVisitor& dependencyVisitor;
+
+                    SerialNodeExecutor(DependencyVisitor& d) : dependencyVisitor(d) {}
+
+                    void execute() {
+
+                        //qDebug() << "------------------------";
+
+                        //Q_FOREACH (DependencyVisitor::NodeRelationMap::const_iterator it, dependencyVisitor.dependencyMap) {
+
+                        QQueue<Node*> nodeQueue;
+
+                        DependencyVisitor::NodeRelationMap::const_iterator it = dependencyVisitor.dependencyMap.constBegin();
+                        while (it != dependencyVisitor.dependencyMap.constEnd()) {
+                            Node* node = it.key();
+                            //qDebug() << "Dependencies of" << node->displayLabel();
+                            //bool hasDeps = false;
+                            //Q_FOREACH (Node* depNode, it.value()) {
+                                //qDebug() << " -" << depNode->displayLabel();
+                                //hasDeps = true;
+                            //}
+                            bool hasDeps = !it.value().isEmpty();
+                            if (!hasDeps) {
+                                nodeQueue.append(node);
+                            }
+                            ++it;
+                        }
+
+                        //qDebug() << "------------------------";
+
+                        Q_FOREACH (Node* node, nodeQueue) {
+                            node->accept(*this);
+                        }
+                    }
+
+                    void postVisit(Node* node) {
+                        Q_FOREACH (Node* dependentNode, dependencyVisitor.dependentMap[node]) {
+                            dependentNode->accept(*this);
+                        }
+                    }
+
+                    virtual void visit(MixerNode* mixerNode) {
+                        mixerNode->processAudio();
+                        postVisit(mixerNode);
+                    }
+
+                    virtual void visit(VstNode* vstNode) {
+                        vstNode->processEvents();
+                        vstNode->processAudio();
+                        postVisit(vstNode);
+                    }
+
+                } executor(dependencyVisitor);
+
+                executor.execute();
+
+                // FIXME: what if output node does not have 2 outputs? deal with it.
+
+
 
                 // convert float data buffers to our audio format
 
@@ -586,7 +932,7 @@ public slots:
 
                 for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
                     for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                        float clamped = std::min(std::max(outputBlocks[channel][sampleIndex], -1.f), 1.f);
+                        float clamped = std::min(std::max(outputNode->outputChannelBufferConst(channel)[sampleIndex], -1.f), 1.f);
                         *ptr++ = qint16(clamped * 32767);
                     }
                 }
@@ -697,7 +1043,7 @@ public:
     VstButton(VstNode* vstNode, QWidget* parent=0)
         : m_vstNode(vstNode) {
         setCheckable(true);
-        setText(tr("VST %1").arg((ulong)vstNode));
+        setText(vstNode->displayLabel());
         connect(this, SIGNAL(toggled(bool)), SLOT(showOrHide(bool)));
         m_window = new NodeWindow(m_vstNode);
     }
@@ -745,7 +1091,7 @@ public:
 
         for (unsigned i = 0; i < m_group->numChildNodes(); ++i) {
             Node* node = m_group->childNode(i);
-            VstNode* vstNode = node->vstNode();
+            VstNode* vstNode = dynamic_cast<VstNode*>(node);
             if (vstNode) {
                 VstButton* button = new VstButton(vstNode, widget);
                 mainLayout->addWidget(button);
@@ -761,6 +1107,16 @@ public slots:
     }
 
 };
+
+
+
+inline void Node::Visitor::visit(VstNode* node) {
+    visit(static_cast<Node*>(node));
+}
+
+inline void Node::Visitor::visit(MixerNode* node) {
+    visit(static_cast<Node*>(node));
+}
 
 
 } // namespace En

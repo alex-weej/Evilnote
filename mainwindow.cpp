@@ -4,7 +4,7 @@
 namespace En {
 
 VstTimeInfo s_vstTimeInfo = {0, 0, 0, 0, 135, 0, 0, 0, 4, 4, 0, 0, 0, kVstTransportPlaying | kVstPpqPosValid | kVstTimeSigValid | kVstTempoValid};
-
+const float* Node::s_nullInputBuffer = 0;
 
 NodeWindow::NodeWindow(En::VstNode* vstNode, QWidget *parent) :
     QMainWindow(parent),
@@ -174,6 +174,14 @@ void NodeWindow::on_showEditorButton_toggled(bool checked)
     // this seems to be necessary to force the sizeHint to be updated so we actually shrink to fit.
     QCoreApplication::processEvents();
     adjustSize();
+}
+
+
+
+NodeGroup::~NodeGroup() {
+    Q_FOREACH (Node* node, m_nodes) {
+        delete node;
+    }
 }
 
 }

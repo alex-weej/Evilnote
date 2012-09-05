@@ -15,6 +15,7 @@ int main(int argc, char*argv[])
 
     //vstFileName = "/Library/Audio/Plug-Ins/VST/Massive.vst";
     //vstFileName = "/Library/Audio/Plug-Ins/VST/Omnisphere.vst";
+    En::VstModule omnisphereModule("/Library/Audio/Plug-Ins/VST/Omnisphere.vst");
     //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst";
     //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
     //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
@@ -24,7 +25,7 @@ int main(int argc, char*argv[])
     En::VstModule massiveModule("/Library/Audio/Plug-Ins/VST/Massive.vst");
     //En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Omnisphere.vst");
     //En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/CurveCM.vst");
-    //En::VstModule vstModule1("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst");
+    En::VstModule sylenthModule("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst");
     //En::VstModule vstModule2("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/ArtsAcousticReverb.vst");
     En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
     //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");
@@ -38,6 +39,18 @@ int main(int argc, char*argv[])
     En::VstNode* massive2 = new En::VstNode(&massiveModule, rootGroup);
     En::VstNode* ubermod1 = new En::VstNode(&ubermodModule, rootGroup);
     En::VstNode* stutter1 = new En::VstNode(&stutterModule, rootGroup);
+    En::VstNode* omnisphere1 = new En::VstNode(&omnisphereModule, rootGroup);
+    En::VstNode* sylenth1 = new En::VstNode(&sylenthModule, rootGroup);
+    En::MixerNode* mixerNode = new En::MixerNode(rootGroup);
+
+
+    const int stressTestInstances = 10;
+
+    for (int i = 0; i < stressTestInstances; ++i) {
+        En::Node* node = new En::VstNode(&massiveModule, rootGroup);
+        mixerNode->addInput(node);
+    }
+
     //En::VstNode* krreverb1 = new En::VstNode(&reverbModule);
 
 
@@ -45,11 +58,12 @@ int main(int argc, char*argv[])
     stutter1->setInput(massive1);
 
 
-    En::MixerNode* mixerNode = new En::MixerNode(rootGroup);
     mixerNode->addInput(massive2);
     mixerNode->addInput(ubermod1);
     //mixerNode->addInput(massive1);
-    mixerNode->addInput(stutter1);
+    //mixerNode->addInput(stutter1);
+    mixerNode->addInput(omnisphere1);
+    mixerNode->addInput(sylenth1);
 
 
     En::HostThread* hostThread = new En::HostThread(mixerNode);
