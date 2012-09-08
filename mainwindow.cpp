@@ -23,9 +23,24 @@ NodeWindow::NodeWindow(En::VstNode* vstNode, QWidget *parent) :
 
     QVBoxLayout* layout = new QVBoxLayout(ui->vstPlaceholder);
     En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode, ui->vstPlaceholder);
-    //QLineEdit* interface = new QLineEdit;
     layout->addWidget(interface);
+    //En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode);
 
+//    QWidget* popup = new QWidget;
+//    QVBoxLayout* pLayout = new QVBoxLayout(popup);
+//    pLayout->addWidget(new QLabel("VST EDITOR"));
+//    pLayout->addWidget(interface);
+//    popup->show();
+
+
+
+    m_vstEditorWidget = interface;
+
+    //layout->addWidget(interface);
+
+    //En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode);
+    //interface->show();
+    //interface->raise();
 
     m_funkyTownPos = 0;
     m_funkyTown << 0 << 0 << -2 << 0 << -5 << -5 << 0 << 5 << 4 << 0;
@@ -57,10 +72,18 @@ NodeWindow::~NodeWindow()
 
 
 static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
-    VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, 0, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
-    // heap that shit.
-    VstMidiEvent* pEvent = new VstMidiEvent(event);
-    vstNode->queueEvent((VstEvent*)pEvent);
+    // temp testing stuff to force sending multiple notes at the exact same time.
+    // change i to a number <= 4 to make this send chords.
+    for (int i = 0; i < 1; ++i) {
+        if (i == 1) noteValue += 4;
+        else if (i == 2) noteValue += 3;
+        else if (i == 3) noteValue += 5;
+
+        VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
+        // heap that shit.
+        VstMidiEvent* pEvent = new VstMidiEvent(event);
+        vstNode->queueEvent((VstEvent*)pEvent);
+    }
 }
 
 void NodeWindow::on_testNoteButton_pressed()
@@ -163,20 +186,21 @@ void NodeWindow::keyPressEvent(QKeyEvent* event) {
 void NodeWindow::keyReleaseEvent(QKeyEvent* event) {
     int note = keyEventToNote(event);
     if (note == -1) {
-        return QMainWindow::keyPressEvent(event);
+        return QMainWindow::keyReleaseEvent(event);
     }
     sendNote(m_vstNode, note, 0);
 }
 
 void NodeWindow::on_showEditorButton_toggled(bool checked)
 {
-    ui->vstPlaceholder->setVisible(checked);
-    // this seems to be necessary to force the sizeHint to be updated so we actually shrink to fit.
-    QCoreApplication::processEvents();
-    adjustSize();
+    m_vstEditorWidget->setVisible(checked);
+    if (!checked) {
+        // this seems to be necessary to force the sizeHint to be updated so we actually shrink to fit
+        // if we're hiding...
+        QCoreApplication::processEvents();
+        adjustSize();
+    }
 }
-
-
 
 NodeGroup::~NodeGroup() {
     Q_FOREACH (Node* node, m_nodes) {

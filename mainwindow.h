@@ -34,6 +34,9 @@ typedef AEffect* (*PluginEntryProc) (audioMasterCallback audioMaster);
 
 inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index, VstIntPtr value, void* ptr, float opt)
 {
+
+    //qDebug() << "hostCallback in thread" << QThread::currentThreadId();
+
     VstIntPtr result = 0;
 
     // Filter idle calls...
@@ -55,24 +58,63 @@ inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index,
     if (!filtered)
         //qDebug("PLUG> HostCallback (opcode %d)\n index = %d, value = %p, ptr = %p, opt = %f", opcode, index, FromVstPtr<void> (value), ptr, opt);
 
-    switch (opcode)
-    {
+        switch (opcode)
+        {
         case audioMasterVersion:
             result = kVstVersion;
             break;
-        case audioMasterGetTime: // 7
+
+        case DECLARE_VST_DEPRECATED (audioMasterPinConnected):
+            //qDebug() << "pin connected";
+            break;
+
+        case DECLARE_VST_DEPRECATED (audioMasterWantMidi):
+            break;
+
+        case audioMasterGetTime:
             result = (VstIntPtr)&s_vstTimeInfo;
             break;
 
-        case audioMasterGetCurrentProcessLevel: // 23
+        case audioMasterGetCurrentProcessLevel:
             result = kVstProcessLevelUser;
             break;
 
+        case audioMasterCanDo:
+        {
+            QString canDoQuery((char*)ptr);
+
+            QMap<QString, int> canDos;
+            canDos["sendVstEvents"] = 1;
+            canDos["sendVstMidiEvent"] = 1;
+            canDos["sendVstTimeInfo"] = 1;
+            canDos["sizeWindow"] = 1;
+
+            QMap<QString, int>::iterator it = canDos.find(canDoQuery);
+            if (it == canDos.end()) {
+                result = 0; // don't know
+                qDebug() << "unknown audioMasterCanDo:" << canDoQuery;
+            } else {
+                result = *it;
+            }
+
+            break;
+        }
+
+        case audioMasterSizeWindow:
+        {
+            // TODO: handle this!
+            int width = index;
+            int height = value;
+            qDebug() << "SIZE WINDOW" << width << height;
+            break;
+        }
+
         default:
             //qDebug() << "UNHANDLED HOST OPCODE" << opcode;
+            //Q_ASSERT(false);
             break;
 
-    }
+        }
 
     return result;
 }
@@ -353,7 +395,12 @@ public:
 
         const size_t blockSize = 512;
 
+        qDebug() << "opening instance";
+
         m_vstInstance->dispatcher (m_vstInstance, effOpen, 0, 0, 0, 0);
+
+
+        qDebug() << "getting product string";
 
         int ret = 0;
         char charBuffer[64] = {0};
@@ -364,10 +411,12 @@ public:
             m_productName = tr("Untitled");
         }
 
+        qDebug() << "vst product string is" << m_productName;
+
 
         VstPinProperties pinProps;
 
-        qDebug() << "output props for vst" << m_productName;
+        qDebug() << "output props";
 
         int pin;
         const int maxPins = 128;
@@ -416,11 +465,16 @@ public:
 //            qDebug() << "new speaker arrangement: ret" << ret << "inputs" << in->numChannels << "outputs" << out->numChannels;
 //        }
 
+        qDebug() << "setSampleRate";
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
 
+        qDebug() << "setBlockSize";
         m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, blockSize, 0, 0);
 
+        qDebug() << "mainsChanged";
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
+
+
     }
 
     virtual VstNode* vstNode() {
@@ -453,6 +507,7 @@ public:
 
     void queueEvent(VstEvent* event) {
         QMutexLocker locker(&m_eventQueueMutex);
+        Q_UNUSED(locker);
         m_eventQueue[m_eventQueueWriteIndex].push_back(event);
     }
 
@@ -466,12 +521,11 @@ public:
         size_t numEvents = eventQueue.size();
         if (numEvents) {
             qDebug() << "processing events" << numEvents;
-            VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * (numEvents - 1));
+            VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * numEvents);
             events->numEvents = numEvents;
             events->reserved = 0;
             std::copy(eventQueue.begin(), eventQueue.end(), &events->events[0]);
             eventQueue.clear();
-            locker.unlock();
 
             events->events[numEvents] = 0;
             vstInstance()->dispatcher (vstInstance(), effProcessEvents, 0, 0, events, 0);
@@ -629,7 +683,7 @@ public:
 
         m_timer = new QTimer(this);
         m_timer->setSingleShot(true);
-        m_timer->setInterval(1);
+        m_timer->setInterval(0);
         connect(m_timer, SIGNAL(timeout()), this, SLOT(writeData()));
         m_timer->start();
 
@@ -652,6 +706,9 @@ public slots:
     }
 
     void writeData() {
+
+        //QElapsedTimer elTimer;
+        //elTimer.start();
 
         if (m_lastProfiledTime != 0) {
             uint64_t thisTime = mach_absolute_time();
@@ -816,6 +873,9 @@ public slots:
                 //QMap<Node*, QSet<Node*> > dependencyMap;
                 //QMap<Node*, QSet<Node*> > dependentMap;
 
+
+                //qDebug() << "checkpoint before dep calc" << elTimer.restart();
+
                 struct DependencyVisitor: public Node::Visitor {
 
 
@@ -858,6 +918,10 @@ public slots:
                 } dependencyVisitor;
 
                 dependencyVisitor.visitRecurse(outputNode);
+
+
+                //qDebug() << "checkpoint before executor" << elTimer.restart();
+
                 //outputNode->accept(dependencyVisitor);
                 // TODO: fix the above so it only happens when the graph changes. no need to recalculate dependencies on every single buffer generation
 
@@ -922,6 +986,9 @@ public slots:
 
                 executor.execute();
 
+
+                //qDebug() << "checkpoint before buffer write" << elTimer.restart();
+
                 // FIXME: what if output node does not have 2 outputs? deal with it.
 
 
@@ -940,6 +1007,10 @@ public slots:
 
                 //qDebug("writing buffer");
                 qint64 written = m_ioDevice->write(m_buffer.data(), m_buffer.size());
+
+
+                //qDebug() << "checkpoint finish" << elTimer.restart();
+
                 //m_ioDevice->waitForBytesWritten(-1);
                 //qDebug("%lld bytes written!", written);
 
@@ -956,6 +1027,9 @@ public slots:
         } else {
             // do nothing.
         }
+
+
+        //qDebug() << "bytesFree = " << m_audioOutput->bytesFree();
 
 
         m_timer->start();
@@ -983,9 +1057,9 @@ class HostThread : public QThread {
     Node* m_outputNode;
     Host* m_host;
 public:
-    HostThread(Node* outputNode) : m_outputNode(outputNode), m_host(0) {
-
-    }
+    HostThread(Node* outputNode)
+        : m_outputNode(outputNode)
+        , m_host(0) {}
 
     virtual ~HostThread() {
         m_host->stop();
@@ -1011,7 +1085,7 @@ class NodeWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit NodeWindow(En::VstNode* vstNode, QWidget *parent = 0);
+    NodeWindow(VstNode* vstNode, QWidget *parent = 0);
     ~NodeWindow();
 
 protected:
@@ -1027,7 +1101,8 @@ private slots:
 
 private:
     Ui::MainWindow *ui;
-    En::VstNode* m_vstNode; // not owned
+    VstNode* m_vstNode; // not owned
+    QWidget* m_vstEditorWidget;
     int m_note;
     QVector<int> m_funkyTown;
     unsigned m_funkyTownPos;
@@ -1036,29 +1111,31 @@ private:
 
 
 
-class VstButton: public QPushButton {
+class NodeButton: public QPushButton {
     Q_OBJECT
 
 public:
-    VstButton(VstNode* vstNode, QWidget* parent=0)
-        : m_vstNode(vstNode) {
+    NodeButton(Node* node, QWidget* parent=0)
+        : m_node(node)
+        , m_window(0) {
         setCheckable(true);
-        setText(vstNode->displayLabel());
+        setText(node->displayLabel());
         connect(this, SIGNAL(toggled(bool)), SLOT(showOrHide(bool)));
-        m_window = new NodeWindow(m_vstNode);
+        VstNode* vstNode = dynamic_cast<VstNode*>(node);
+        if (vstNode) {
+            m_window = new NodeWindow(vstNode);
+        }
     }
 
-    virtual ~VstButton() {
+    virtual ~NodeButton() {
         delete m_window;
     }
 
 private slots:
-    void showOrHide(bool visible) {
-        m_window->setVisible(visible);
-    }
+    void showOrHide(bool visible);
 
 private:
-    VstNode* m_vstNode;
+    Node* m_node;
     NodeWindow* m_window;
 };
 
@@ -1091,11 +1168,8 @@ public:
 
         for (unsigned i = 0; i < m_group->numChildNodes(); ++i) {
             Node* node = m_group->childNode(i);
-            VstNode* vstNode = dynamic_cast<VstNode*>(node);
-            if (vstNode) {
-                VstButton* button = new VstButton(vstNode, widget);
-                mainLayout->addWidget(button);
-            }
+            NodeButton* button = new NodeButton(node, widget);
+            mainLayout->addWidget(button);
         }
 
     }

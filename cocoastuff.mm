@@ -9,12 +9,12 @@ VstEditorWidget::VstEditorWidget(VstNode* vstNode, QWidget* parent/*=0*/)
       m_vstNode(vstNode),
       m_view(0)
 {
-    // TODO: learn what this pool stuff is for...
+    // is this pool necessary? answers on a postcard...
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     NSView* superview = [[NSView alloc] init];
     setCocoaView(superview);
+    [superview release];
     [pool release];
-
 }
 
 VstEditorWidget::~VstEditorWidget() {
@@ -28,7 +28,6 @@ void VstEditorWidget::showEvent(QShowEvent* event) {
 
     AEffect* vstInstance = m_vstNode->vstInstance();
 
-
     NSView* superview = (NSView*)cocoaView();
     NSArray* subviews;
 
@@ -41,13 +40,18 @@ void VstEditorWidget::showEvent(QShowEvent* event) {
     m_view = [[subviews objectAtIndex:0] retain];
     [[NSNotificationCenter defaultCenter] addObserverForName:@"NSViewFrameDidChangeNotification" object:m_view queue:nil usingBlock:^(NSNotification* notification) {
         //qDebug() << "adjust editor size to" << sizeHint();
-        adjustSize();
+        // need to adjust the superview frame to be the same as the view frame
+        [superview setFrame:[m_view frame]];
+        setFixedSize(sizeHint());
+        // adjust the size of the window to fit.
+        // FIXME: this is indeed a bit dodgy ;)
+        QApplication::processEvents();
+        window()->adjustSize();
     }];
-
-    setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     QMacCocoaViewContainer::showEvent(event);
 
+    setFixedSize(sizeHint());
 }
 
 
@@ -84,11 +88,19 @@ QSize VstEditorWidget::sizeHint() const {
     NSRect frame = [m_view frame];
     ret = QSize(frame.size.width, frame.size.height);
 
-    //qDebug() << "sizeHint" << ret;
-
     return ret;
 
 }
 
 
+
+void NodeButton::showOrHide(bool visible) {
+
+    if (m_window) {
+        m_window->setVisible(visible);
+    }
+
 }
+
+
+} // namespace En

@@ -14,10 +14,9 @@ INCLUDEPATH += /Users/alex/Downloads/vstsdk2.4
 LIBS += -framework CoreFoundation -framework Carbon -framework Cocoa
 
 SOURCES += main.cpp\
-        mainwindow.cpp \
-    cocoastuff.mm
+        mainwindow.cpp
 
-OBJECTIVE_SOURCES +=
+OBJECTIVE_SOURCES += cocoastuff.mm
 
 HEADERS  += mainwindow.h
 
