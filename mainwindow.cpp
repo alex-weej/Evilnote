@@ -233,10 +233,27 @@ void NodeGraphicsItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
    QGraphicsItem::mousePressEvent(event);
 }
 
+void NodeGraphicsItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
+{
+    m_node->openEditorWindow();
+}
+
 void NodeGraphicsItem::updateConnectionArrows() const {
     Q_FOREACH (NodeConnectionArrow* arrow, m_connectionArrows) {
         arrow->updatePositions();
     }
+}
+
+void VstNode::openEditorWindow() {
+    if (!m_editorWindow) {
+        m_editorWindow = new NodeWindow(this);
+    }
+    m_editorWindow->show();
+    m_editorWindow->raise();
+}
+
+void NodeButton::openEditorWindow() {
+    m_node->openEditorWindow();
 }
 
 }

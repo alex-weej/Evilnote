@@ -310,6 +310,10 @@ public:
         m_position = position;
     }
 
+    virtual void openEditorWindow() {
+        // do nothing
+    }
+
 };
 
 
@@ -385,6 +389,8 @@ public:
 
 };
 
+class NodeWindow;
+
 class VstNode: public Node {
 
     Q_OBJECT
@@ -395,6 +401,8 @@ class VstNode: public Node {
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
     VstNode* m_input;
     QString m_productName;
+    NodeWindow* m_editorWindow; // move this to Node eventually
+
 
 
 public:
@@ -403,7 +411,8 @@ public:
         : Node(nodeGroup)
         , m_vstInstance(vstModule->createVstInstance())
         , m_eventQueueWriteIndex(0)
-        , m_input(0) {
+        , m_input(0)
+        , m_editorWindow(0) {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
 
         const size_t blockSize = 512;
@@ -591,6 +600,7 @@ public:
         return m_input;
     }
 
+    virtual void openEditorWindow();
 
 };
 
@@ -1122,34 +1132,28 @@ private:
     int m_lastNote;
 };
 
-
-
+// UNUSED OBSOLETE DEAD CLASS
 class NodeButton: public QPushButton {
+
     Q_OBJECT
 
 public:
-    NodeButton(Node* node, QWidget* parent=0)
-        : m_node(node)
-        , m_window(0) {
-        setCheckable(true);
-        setText(node->displayLabel());
-        connect(this, SIGNAL(toggled(bool)), SLOT(showOrHide(bool)));
-        VstNode* vstNode = dynamic_cast<VstNode*>(node);
-        if (vstNode) {
-            m_window = new NodeWindow(vstNode);
-        }
-    }
 
-    virtual ~NodeButton() {
-        delete m_window;
+    NodeButton(Node* node, QWidget* parent=0)
+        : m_node(node) {
+        //setCheckable(true);
+        setText(node->displayLabel());
+        connect(this, SIGNAL(clicked()), SLOT(openEditorWindow()));
     }
 
 private slots:
-    void showOrHide(bool visible);
+
+    void openEditorWindow();
 
 private:
+
     Node* m_node;
-    NodeWindow* m_window;
+
 };
 
 
@@ -1194,6 +1198,7 @@ public:
 
     NodeGraphicsItem(Node* node)
         : m_node(node) {
+
         setFlag(ItemIsMovable);
         setFlag(ItemSendsGeometryChanges);
 
@@ -1204,7 +1209,6 @@ public:
         QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(this);
         label->setText(m_node->displayLabel());
         label->setPos(-label->boundingRect().width() / 2.0, -label->boundingRect().height() / 2.0);
-
 
     }
 
@@ -1236,6 +1240,7 @@ public:
 protected:
 
     virtual void mousePressEvent(QGraphicsSceneMouseEvent *event);
+    virtual void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event);
 
     virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value)
     {
@@ -1401,11 +1406,13 @@ public:
         mainLayout->addWidget(m_utilisationMeter);
         //setCentralWidget(m_utilisationMeter);
 
+#if 0
         for (unsigned i = 0; i < m_group->numChildNodes(); ++i) {
             Node* node = m_group->childNode(i);
             NodeButton* button = new NodeButton(node, widget);
             mainLayout->addWidget(button);
         }
+#endif
 
 
         NodeGraphEditor* graph = new NodeGraphEditor(group);
@@ -1431,6 +1438,8 @@ inline void Node::Visitor::visit(VstNode* node) {
 inline void Node::Visitor::visit(MixerNode* node) {
     visit(static_cast<Node*>(node));
 }
+
+
 
 
 } // namespace En

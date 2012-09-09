@@ -94,13 +94,5 @@ QSize VstEditorWidget::sizeHint() const {
 
 
 
-void NodeButton::showOrHide(bool visible) {
-
-    if (m_window) {
-        m_window->setVisible(visible);
-    }
-
-}
-
 
 } // namespace En
