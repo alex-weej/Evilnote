@@ -1364,6 +1364,7 @@ public:
         //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
         m_scene = new QGraphicsScene(this);
+        m_scene->setSceneRect(-1000, -1000, 2000, 2000);
         setScene(m_scene);
         setRenderHint(QPainter::Antialiasing);
 
