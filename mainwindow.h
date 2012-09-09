@@ -1447,7 +1447,6 @@ struct VstInfo {
 };
 
 
-
 class Core : public QObject {
 
     Q_OBJECT
@@ -1455,13 +1454,24 @@ class Core : public QObject {
     QMap<QString, VstInfo> m_vstInfoMap;
     QMap<QString, VstModule*> m_vstModuleMap;
 
+    static Core* s_instance;
+
 public:
+
+    Core() {
+        Q_ASSERT(s_instance == 0);
+        s_instance = this;
+    }
+
+    ~Core();
+
+    static Core* instance() {
+        return s_instance;
+    }
 
     void scanVstDir(QDir dir);
     void scanVstDirs();
     VstModule* vstModule(const QString& vstName);
-
-    ~Core();
 
 };
 

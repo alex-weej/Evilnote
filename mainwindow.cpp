@@ -258,9 +258,12 @@ void NodeButton::openEditorWindow() {
 
 
 
+Core* Core::s_instance = 0;
+
+
 void Core::scanVstDir(QDir dir)
 {
-    qDebug() << "scanning" << dir << dir.count();
+    //qDebug() << "scanning" << dir << dir.count();
 
     Q_FOREACH (QString entry, dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
 
@@ -270,7 +273,6 @@ void Core::scanVstDir(QDir dir)
             scanVstDir(QDir(dir.filePath(entry)));
         }
 
-        VstInfo info;
         // better way to get the 'vst name' for the module?
         QString vstName = re.capturedTexts()[1];
 
@@ -280,6 +282,7 @@ void Core::scanVstDir(QDir dir)
             continue;
         }
 
+        VstInfo info;
         info.name = vstName;
         info.moduleFileName = dir.filePath(entry);
 
