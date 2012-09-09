@@ -5,6 +5,7 @@
 #include <QtMultimedia>
 #include <QAudioOutput>
 #include <QMacCocoaViewContainer>
+#include <QGLWidget>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <Carbon/Carbon.h>
@@ -239,6 +240,9 @@ class Node: public QObject {
 
     NodeGroup* m_nodeGroup;
 
+    // position in node graph.
+    QPointF m_position;
+
 protected:
 
     class ChannelData {
@@ -296,6 +300,15 @@ public:
     }
 
     virtual QString displayLabel() const = 0;
+
+    QPointF position() const {
+        return m_position;
+    }
+
+    void setPosition(const QPointF& position) {
+        //qDebug() << "Setting node position to" << position;
+        m_position = position;
+    }
 
 };
 
@@ -1140,6 +1153,140 @@ private:
 };
 
 
+
+class RootGraphicsItem: public QGraphicsItem {
+
+public:
+
+    QRectF boundingRect() const {
+        return QRectF(0, 0, 0, 0);
+    }
+
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+        // do nothing;
+    }
+
+
+};
+
+
+
+/*
+
+  random thoughts:
+
+   - should maintain one scene per group?
+
+*/
+
+
+
+class NodeGraphicsItem: public QGraphicsItem {
+
+    Node* m_node; // not owned!
+
+public:
+
+    NodeGraphicsItem(Node* node)
+        : m_node(node) {
+        setFlag(ItemIsMovable);
+        setFlag(ItemSendsGeometryChanges);
+
+        setAcceptHoverEvents(true);
+
+        setPos(m_node->position());
+
+        QGraphicsSimpleTextItem* label = new QGraphicsSimpleTextItem(this);
+        label->setText(m_node->displayLabel());
+        label->setPos(-label->boundingRect().width() / 2.0, -label->boundingRect().height() / 2.0);
+
+
+    }
+
+    QRectF boundingRect() const {
+        return QRectF(QPointF(-100, -20), QSizeF(200, 40));
+    }
+
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
+        QBrush brush;
+        brush = QBrush(QColor(240, 240, 240));
+        painter->setBrush(brush);
+        qreal radius = 10.;
+        painter->drawRoundedRect(boundingRect(), radius, radius);
+
+        // draw node label
+//        QTextOption opt(Qt::AlignCenter);
+//        painter->drawText(boundingRect(), m_node->displayLabel(), opt);
+    }
+
+
+
+    void stackOnTop() {
+        // this appears to be the only sensible way to re-order such that this is on top.
+        // madness.
+        QGraphicsItem* parentItem = this->parentItem();
+        if (parentItem) {
+            setParentItem(0);
+            setParentItem(parentItem);
+        }
+    }
+
+protected:
+
+    virtual void mousePressEvent(QGraphicsSceneMouseEvent *event) {
+        stackOnTop();
+        QGraphicsItem::mousePressEvent(event);
+    }
+
+    virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value)
+    {
+        if (change == ItemPositionChange) {
+            // value is the new position.
+            QPointF newPos = value.toPointF();
+            m_node->setPosition(newPos);
+        }
+        return QGraphicsItem::itemChange(change, value);
+    }
+
+};
+
+
+class NodeGraphEditor: public QGraphicsView {
+
+    Q_OBJECT
+
+    NodeGroup* m_group; // not owned
+
+    QGraphicsScene* m_scene;
+
+public:
+    NodeGraphEditor(NodeGroup* group, QWidget* parent = 0)
+        : QGraphicsView(parent)
+        , m_group(group)
+        , m_scene(0) {
+
+        setFocusPolicy(Qt::StrongFocus);
+
+        m_scene = new QGraphicsScene(this);
+        setScene(m_scene);
+        setRenderHint(QPainter::Antialiasing);
+
+        QGraphicsItem* rootItem = new RootGraphicsItem;
+        scene()->addItem(rootItem);
+
+
+        // this code /will/ move
+        for (int i = 0; i < m_group->numChildNodes(); ++i) {
+            Node* node = m_group->childNode(i);
+            NodeGraphicsItem* item = new NodeGraphicsItem(node);
+            item->setParentItem(rootItem);
+        }
+
+    }
+
+};
+
+
 class MainWindow: public QMainWindow {
 
     Q_OBJECT
@@ -1171,6 +1318,11 @@ public:
             NodeButton* button = new NodeButton(node, widget);
             mainLayout->addWidget(button);
         }
+
+
+        NodeGraphEditor* graph = new NodeGraphEditor(group);
+
+        mainLayout->addWidget(graph);
 
     }
 
