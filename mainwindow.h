@@ -1562,11 +1562,17 @@ private slots:
     void createNode() {
         QString name = this->text().trimmed();
 
-        qDebug() << "Creating node for:" << name;
+        // if there's exactly 1 item in the completion, just run with it. bit crappy, but useful.
+        if (completer()->completionCount() == 1) {
+            completer()->setCurrentRow(0);
+            name = completer()->currentCompletion();
+        }
+
+        //qDebug() << "Creating node for:" << name;
 
         FactoryMap::Iterator it = m_factories.find(name);
         if (it == m_factories.end()) {
-            qDebug() << "nope";
+            //qDebug() << "nope";
             // TODO: some kind of error feedback
             return;
         }
