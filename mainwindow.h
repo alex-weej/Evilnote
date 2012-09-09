@@ -466,8 +466,8 @@ class VstNode: public Node {
 
 public:
 
-    class Factory: public Node::Factory {
-
+    class Factory: public Node::Factory
+    {
         QString m_vstName;
 
     public:
@@ -481,10 +481,10 @@ public:
         : m_vstInstance(vstModule->createVstInstance())
         , m_eventQueueWriteIndex(0)
         , m_input(0)
-        , m_editorWindow(0) {
+        , m_editorWindow(0)
+    {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
 
-        const size_t blockSize = 512;
 
         qDebug() << "opening instance";
 
@@ -515,7 +515,7 @@ public:
             int ret = m_vstInstance->dispatcher (m_vstInstance, effGetInputProperties, pin, 0, &pinProps, 0);
             if (ret == 1) {
                 qDebug() << "Input pin" << pin << pinProps.label << pinProps.flags;
-                m_inputChannelData << ChannelData(pinProps.label, blockSize);
+                m_inputChannelData << ChannelData(pinProps.label, blockSize());
             } else {
                 break;
             }
@@ -525,7 +525,7 @@ public:
             int ret = m_vstInstance->dispatcher (m_vstInstance, effGetOutputProperties, pin, 0, &pinProps, 0);
             if (ret == 1) {
                 qDebug() << "Output pin" << pin << pinProps.label << pinProps.flags;
-                m_outputChannelData << ChannelData(pinProps.label, blockSize);
+                m_outputChannelData << ChannelData(pinProps.label, blockSize());
             } else {
                 break;
             }
@@ -533,6 +533,21 @@ public:
 
         qDebug() << "inputs:" << numInputChannels();
         qDebug() << "outputs:" << numOutputChannels();
+
+
+        // HACK HACK HACK
+        // not sure why some plugins do this. there MUST be a better way to get the plugin configuration...
+        // default to 2 in 2 out just so we can actually use these plugins without crashing.
+
+        if (numInputChannels() == 0 && numOutputChannels() == 0) {
+
+            qDebug() << "WARNING: looks like this plugin is reporting 0/0 IO. Configuring as 2/2 instead.";
+
+            for (int c = 0; c < 2; ++c) {
+                m_inputChannelData << ChannelData(QString("In %2").arg(QString(c == 0 ? "L" : "R")), blockSize());
+                m_outputChannelData << ChannelData(QString("Out %2").arg(QString(c == 0 ? "L" : "R")), blockSize());
+            }
+        }
 
 //        VstSpeakerArrangement inputSpeakerArr = {kSpeakerArrStereo, 2};
 //        VstSpeakerArrangement outputSpeakerArr = {kSpeakerArrStereo, 2};
@@ -560,11 +575,10 @@ public:
         m_vstInstance->dispatcher (m_vstInstance, effSetSampleRate, 0, 0, 0, 44100);
 
         qDebug() << "setBlockSize";
-        m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, blockSize, 0, 0);
+        m_vstInstance->dispatcher (m_vstInstance, effSetBlockSize, 0, blockSize(), 0, 0);
 
         qDebug() << "mainsChanged";
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
-
 
     }
 
