@@ -52,9 +52,9 @@ int main(int argc, char*argv[])
     curveCM1->setPosition(pos += posMove);
     mixerNode->addInput(curveCM1);
 
-    vstNode = new En::VstNode(core.vstModule("Sylenth1"), rootGroup);
-    vstNode->setPosition(pos += posMove);
-    mixerNode->addInput(vstNode);
+    //    vstNode = new En::VstNode(core.vstModule("Sylenth1"), rootGroup);
+    //    vstNode->setPosition(pos += posMove);
+    //    mixerNode->addInput(vstNode);
 
     vstNode = new En::VstNode(core.vstModule("Padshop"), rootGroup);
     vstNode->setPosition(pos += posMove);

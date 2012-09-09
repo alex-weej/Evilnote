@@ -332,4 +332,35 @@ Core::~Core()
     }
 }
 
+void NodeGraphEditor::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Tab) {
+        NodeCreationDialog d(m_nodeGroup);
+        d.exec();
+        return;
+    }
+
+    QGraphicsView::keyPressEvent(event);
 }
+
+Node *VstNode::Factory::create(NodeGroup *nodeGroup)
+{
+    return new VstNode(Core::instance()->vstModule(m_vstName), nodeGroup);
+}
+
+NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QWidget *parent)
+    : QDialog(parent, Qt::Popup)
+    , m_nodeGroup(nodeGroup) {
+
+    initCocoa();
+
+    QVBoxLayout* layout = new QVBoxLayout(this);
+    NodeCreationWidget* creationWidget = new NodeCreationWidget(m_nodeGroup, this);
+    layout->addWidget(creationWidget);
+    connect(creationWidget, SIGNAL(done()), SLOT(accept()));
+
+    creationWidget->setFocus();
+
+}
+
+} // namespace En

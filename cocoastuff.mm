@@ -93,6 +93,22 @@ QSize VstEditorWidget::sizeHint() const {
 }
 
 
+void NodeCreationDialog::initCocoa()
+{
+    // The intention here is to create a HUD window on Mac, but this doesn't work for some reason
+    return;
+
+    NSView* view = (NSView*)winId();
+    NSWindow* window = [view window];
+
+    if ([window isKindOfClass:[NSPanel class]]) {
+        NSPanel* panel = window;
+        [panel setStyleMask:NSHUDWindowMask];
+    }
+
+}
+
+
 
 
 } // namespace En

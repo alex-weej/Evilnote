@@ -425,15 +425,13 @@ public:
 
     class Factory: public Node::Factory {
 
-        VstModule* m_vstModule;
+        QString m_vstName;
 
     public:
 
-        Factory(VstModule* vstModule) : m_vstModule(vstModule) { }
+        Factory(const QString& vstName) : m_vstName(vstName) {}
 
-        virtual Node* create(NodeGroup *nodeGroup) {
-            return new VstNode(m_vstModule, nodeGroup);
-        }
+        virtual Node* create(NodeGroup *nodeGroup);
     };
 
     VstNode(VstModule* vstModule, NodeGroup* nodeGroup)
@@ -1339,14 +1337,14 @@ class NodeGraphEditor: public QGraphicsView {
 
     Q_OBJECT
 
-    NodeGroup* m_group; // not owned
+    NodeGroup* m_nodeGroup; // not owned
 
     QGraphicsScene* m_scene;
 
 public:
-    NodeGraphEditor(NodeGroup* group, QWidget* parent = 0)
+    NodeGraphEditor(NodeGroup* nodeGroup, QWidget* parent = 0)
         : QGraphicsView(parent)
-        , m_group(group)
+        , m_nodeGroup(nodeGroup)
         , m_scene(0) {
 
         setFocusPolicy(Qt::StrongFocus);
@@ -1370,8 +1368,8 @@ public:
         QMap<Node*, NodeGraphicsItem*> map;
 
         // this code /will/ move at some point
-        for (int i = 0; i < m_group->numChildNodes(); ++i) {
-            Node* node = m_group->childNode(i);
+        for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
+            Node* node = m_nodeGroup->childNode(i);
             NodeGraphicsItem* item = new NodeGraphicsItem(node);
             item->setParentItem(rootItem);
             map[node] = item;
@@ -1380,8 +1378,8 @@ public:
         }
 
         // dodgy, but it'll do for now
-        for (int i = 0; i < m_group->numChildNodes(); ++i) {
-            Node* node = m_group->childNode(i);
+        for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
+            Node* node = m_nodeGroup->childNode(i);
             MixerNode* mixerNode = dynamic_cast<MixerNode*>(node);
             if (mixerNode) {
                 for (int i = 0; i < mixerNode->numInputs(); ++i) {
@@ -1405,6 +1403,10 @@ public:
         }
 
     }
+
+protected:
+
+    virtual void keyPressEvent(QKeyEvent *event);
 
 };
 
@@ -1480,7 +1482,8 @@ class Core : public QObject {
 
     Q_OBJECT
 
-    QMap<QString, VstInfo> m_vstInfoMap;
+    typedef QMap<QString, VstInfo> VstInfoMap;
+    VstInfoMap m_vstInfoMap;
     QMap<QString, VstModule*> m_vstModuleMap;
 
     static Core* s_instance;
@@ -1499,8 +1502,93 @@ public:
     }
 
     void scanVstDir(QDir dir);
+
     void scanVstDirs();
+
     VstModule* vstModule(const QString& vstName);
+
+    const VstInfoMap& vstInfoMap() {
+        return m_vstInfoMap;
+    }
+
+};
+
+
+class NodeCreationWidget: public QLineEdit {
+
+    Q_OBJECT
+
+    NodeGroup* m_nodeGroup;
+    typedef QMap<QString, Node::Factory*> FactoryMap;
+    FactoryMap m_factories;
+
+public:
+
+    NodeCreationWidget(NodeGroup* nodeGroup, QWidget* parent = 0)
+        : QLineEdit(parent)
+        , m_nodeGroup(nodeGroup) {
+
+        connect(this, SIGNAL(returnPressed()), SLOT(createNode()));
+        // TODO: escape handling
+
+        m_factories["Mixer"] = new MixerNode::Factory();
+
+
+        Core* core = Core::instance();
+        Q_FOREACH (QString name, core->vstInfoMap().keys()) {
+            m_factories[name] = new VstNode::Factory(name);
+        }
+
+        QCompleter* comp = new QCompleter(m_factories.keys(), this);
+        // argh, this disables the popup. lame.
+        //comp->setCompletionMode(QCompleter::InlineCompletion);
+        setCompleter(comp);
+
+    }
+
+    ~NodeCreationWidget() {
+        Q_FOREACH (Node::Factory* factory, m_factories) {
+            delete factory;
+        }
+    }
+
+signals:
+
+    void done();
+
+private slots:
+
+    void createNode() {
+        QString name = this->text().trimmed();
+
+        qDebug() << "Creating node for:" << name;
+
+        FactoryMap::Iterator it = m_factories.find(name);
+        if (it == m_factories.end()) {
+            qDebug() << "nope";
+            // TODO: some kind of error feedback
+            return;
+        }
+        it.value()->create(m_nodeGroup);
+
+        emit done();
+    }
+
+};
+
+class NodeCreationDialog: public QDialog {
+
+    Q_OBJECT
+
+    NodeGroup* m_nodeGroup;
+
+public:
+
+    NodeCreationDialog(NodeGroup* nodeGroup, QWidget* parent = 0);
+
+private:
+
+    void initCocoa();
 
 };
 
