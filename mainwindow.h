@@ -1357,8 +1357,8 @@ public:
 
         // Enable 16x multisampling for good AA in the graph
         QGLFormat glFormat;
-        //glFormat.setSampleBuffers(true);
-        //glFormat.setSamples(16);
+        glFormat.setSampleBuffers(true);
+        glFormat.setSamples(16);
         setViewport(new QGLWidget(glFormat));
         // is this necessary?
         //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
