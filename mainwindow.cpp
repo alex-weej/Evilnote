@@ -208,4 +208,35 @@ NodeGroup::~NodeGroup() {
     }
 }
 
+void graphicsItemStackOnTop(QGraphicsItem* item) {
+   // this appears to be the only sensible way to re-order such that this is on top.
+   // madness.
+   QGraphicsItem* parentItem = item->parentItem();
+   if (parentItem) {
+       item->setParentItem(0);
+       item->setParentItem(parentItem);
+   }
+}
+
+
+
+void NodeGraphicsItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
+{
+   // not sure if this re-stacking is gonna be slow...
+
+   graphicsItemStackOnTop(this);
+
+   Q_FOREACH (NodeConnectionArrow* arrow, m_connectionArrows) {
+       graphicsItemStackOnTop(arrow);
+   }
+
+   QGraphicsItem::mousePressEvent(event);
+}
+
+void NodeGraphicsItem::updateConnectionArrows() const {
+    Q_FOREACH (NodeConnectionArrow* arrow, m_connectionArrows) {
+        arrow->updatePositions();
+    }
+}
+
 }

@@ -1171,6 +1171,10 @@ public:
 
 
 
+
+void graphicsItemStackOnTop(QGraphicsItem* item);
+
+
 /*
 
   random thoughts:
@@ -1179,11 +1183,12 @@ public:
 
 */
 
-
+class NodeConnectionArrow;
 
 class NodeGraphicsItem: public QGraphicsItem {
 
     Node* m_node; // not owned!
+    QSet<NodeConnectionArrow*> m_connectionArrows;
 
 public:
 
@@ -1211,11 +1216,11 @@ public:
         QBrush brush;
         brush = QBrush(QColor(240, 240, 240));
         painter->setBrush(brush);
+        // FIXME: use a standard brush somehow? or just use a palette
         qreal radius = 10.;
 
         QPen pen(painter->pen());
         pen.setWidthF(2.0);
-        pen.setColor(QColor(63, 63, 63));
         painter->setPen(pen);
 
         QRectF rect = boundingRect();
@@ -1224,24 +1229,13 @@ public:
         painter->drawRoundedRect(rect, radius, radius);
     }
 
-
-
-    void stackOnTop() {
-        // this appears to be the only sensible way to re-order such that this is on top.
-        // madness.
-        QGraphicsItem* parentItem = this->parentItem();
-        if (parentItem) {
-            setParentItem(0);
-            setParentItem(parentItem);
-        }
+    void addConnectionArrow(NodeConnectionArrow* arrow) {
+        m_connectionArrows << arrow;
     }
 
 protected:
 
-    virtual void mousePressEvent(QGraphicsSceneMouseEvent *event) {
-        stackOnTop();
-        QGraphicsItem::mousePressEvent(event);
-    }
+    virtual void mousePressEvent(QGraphicsSceneMouseEvent *event);
 
     virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value)
     {
@@ -1249,8 +1243,59 @@ protected:
             // value is the new position.
             QPointF newPos = value.toPointF();
             m_node->setPosition(newPos);
+            updateConnectionArrows();
         }
         return QGraphicsItem::itemChange(change, value);
+    }
+
+private:
+
+    void updateConnectionArrows() const;
+
+};
+
+class NodeConnectionArrow: public QGraphicsLineItem {
+
+    Node* m_node;
+    Node* m_inputNode;
+    QGraphicsPolygonItem* m_arrowhead;
+    QGraphicsEllipseItem* m_arrowtail;
+
+public:
+
+    NodeConnectionArrow(Node* node, Node* inputNode)
+        : m_node(node)
+        , m_inputNode(inputNode)
+        , m_arrowhead(0)
+        , m_arrowtail(0) {
+
+        QPen pen(this->pen());
+        pen.setWidth(2);
+        setPen(pen);
+
+        QPolygonF polygon;
+        polygon << QPointF(0, 0) << QPointF(10, 5) << QPointF(8, 0) << QPointF(10, -5);
+        m_arrowhead = new QGraphicsPolygonItem(polygon);
+        m_arrowhead->setPen(Qt::NoPen);
+        QBrush brush(m_arrowhead->brush());
+        brush.setStyle(Qt::SolidPattern);
+        m_arrowhead->setBrush(brush);
+        m_arrowhead->setParentItem(this);
+
+        m_arrowtail = new QGraphicsEllipseItem(-4, -4, 8, 8);
+        m_arrowtail->setPen(Qt::NoPen);
+        m_arrowtail->setBrush(brush);
+        m_arrowtail->setParentItem(this);
+
+        updatePositions();
+    }
+
+    void updatePositions() {
+        // FIXME: these offsets are hardcoded...
+        setLine(QLineF(m_node->position() + QPointF(0, -20), m_inputNode->position() + QPointF(0, 20)));
+        m_arrowhead->setPos(line().p1());
+        m_arrowhead->setRotation(-line().angle());
+        m_arrowtail->setPos(line().p2());
     }
 
 };
@@ -1272,6 +1317,14 @@ public:
 
         setFocusPolicy(Qt::StrongFocus);
 
+        // Enable 16x multisampling for good AA in the graph
+        QGLFormat glFormat;
+        glFormat.setSampleBuffers(true);
+        glFormat.setSamples(16);
+        setViewport(new QGLWidget(glFormat));
+        // is this necessary?
+        //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+
         m_scene = new QGraphicsScene(this);
         setScene(m_scene);
         setRenderHint(QPainter::Antialiasing);
@@ -1280,11 +1333,41 @@ public:
         scene()->addItem(rootItem);
 
 
-        // this code /will/ move
+        QMap<Node*, NodeGraphicsItem*> map;
+
+        // this code /will/ move at some point
         for (int i = 0; i < m_group->numChildNodes(); ++i) {
             Node* node = m_group->childNode(i);
             NodeGraphicsItem* item = new NodeGraphicsItem(node);
             item->setParentItem(rootItem);
+            map[node] = item;
+
+
+        }
+
+        // dodgy, but it'll do for now
+        for (int i = 0; i < m_group->numChildNodes(); ++i) {
+            Node* node = m_group->childNode(i);
+            MixerNode* mixerNode = dynamic_cast<MixerNode*>(node);
+            if (mixerNode) {
+                for (int i = 0; i < mixerNode->numInputs(); ++i) {
+                    Node* inputNode = mixerNode->input(i);
+                    NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
+                    map[node]->addConnectionArrow(arrow);
+                    map[inputNode]->addConnectionArrow(arrow);
+                    arrow->setParentItem(rootItem);
+                }
+            }
+            VstNode* vstNode = dynamic_cast<VstNode*>(node);
+            if (vstNode) {
+                Node* inputNode = vstNode->input();
+                if (inputNode) {
+                    NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
+                    map[node]->addConnectionArrow(arrow);
+                    map[inputNode]->addConnectionArrow(arrow);
+                    arrow->setParentItem(rootItem);
+                }
+            }
         }
 
     }
