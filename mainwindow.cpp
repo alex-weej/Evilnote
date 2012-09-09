@@ -336,6 +336,7 @@ void NodeGraphEditor::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Tab) {
         NodeCreationDialog d(m_nodeGroup);
+        d.move(QCursor::pos());
         d.exec();
         return;
     }
@@ -354,10 +355,15 @@ NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QWidget *parent)
 
     initCocoa();
 
-    QVBoxLayout* layout = new QVBoxLayout(this);
+    setWindowTitle("Create Node");
+
+    QHBoxLayout* layout = new QHBoxLayout(this);
     NodeCreationWidget* creationWidget = new NodeCreationWidget(m_nodeGroup, this);
+    QLabel* label = new QLabel(tr("Create Node:"));
+    layout->addWidget(label);
     layout->addWidget(creationWidget);
     connect(creationWidget, SIGNAL(done()), SLOT(accept()));
+
 
     creationWidget->setFocus();
 

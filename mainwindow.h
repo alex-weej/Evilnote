@@ -1542,6 +1542,7 @@ public:
         QCompleter* comp = new QCompleter(m_factories.keys(), this);
         // argh, this disables the popup. lame.
         //comp->setCompletionMode(QCompleter::InlineCompletion);
+        comp->setCaseSensitivity(Qt::CaseInsensitive);
         setCompleter(comp);
 
     }
