@@ -220,9 +220,7 @@ public:
 
     virtual ~NodeGroup();
 
-    void addChildNode(Node* node) {
-        m_nodes.push_back(node);
-    }
+    void addNode(Node* node);
 
     unsigned numChildNodes() const {
         return m_nodes.size();
@@ -231,6 +229,11 @@ public:
     Node* childNode(unsigned index) const {
         return m_nodes[index];
     }
+
+signals:
+
+    void nodeAdded(Node* node);
+
 };
 
 
@@ -242,7 +245,7 @@ public:
 
     class Factory {
     public:
-        virtual Node* create(NodeGroup* nodeGroup) = 0;
+        virtual Node* create() = 0;
     };
 
 private:
@@ -285,9 +288,13 @@ public:
 
     static const float* s_nullInputBuffer;
 
-    Node(NodeGroup* nodeGroup)
-        : m_nodeGroup(nodeGroup) {
-        nodeGroup->addChildNode(this);
+    Node()
+        : m_nodeGroup(0) {
+    }
+
+    void setNodeGroup(NodeGroup* nodeGroup) {
+        // WARNING: this doesn't actually add this node to the group!
+        m_nodeGroup = nodeGroup;
     }
 
     virtual void accept(Visitor&) {}
@@ -337,18 +344,14 @@ public:
 
     class Factory: public Node::Factory {
     public:
-        virtual Node* create(NodeGroup *nodeGroup) {
-            return new MixerNode(nodeGroup);
+        virtual Node* create() {
+            return new MixerNode;
         }
     };
 
-    MixerNode(NodeGroup* nodeGroup)
-            : Node(nodeGroup) {
-
-
+    MixerNode() {
         m_outputChannelData << ChannelData("Mix L", blockSize());
         m_outputChannelData << ChannelData("Mix R", blockSize());
-
     }
 
 
@@ -431,12 +434,11 @@ public:
 
         Factory(const QString& vstName) : m_vstName(vstName) {}
 
-        virtual Node* create(NodeGroup *nodeGroup);
+        virtual Node* create();
     };
 
-    VstNode(VstModule* vstModule, NodeGroup* nodeGroup)
-        : Node(nodeGroup)
-        , m_vstInstance(vstModule->createVstInstance())
+    VstNode(VstModule* vstModule)
+        : m_vstInstance(vstModule->createVstInstance())
         , m_eventQueueWriteIndex(0)
         , m_input(0)
         , m_editorWindow(0) {
@@ -569,7 +571,7 @@ public:
 
         size_t numEvents = eventQueue.size();
         if (numEvents) {
-            qDebug() << "processing events" << numEvents;
+            //qDebug() << "processing events" << numEvents;
             VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * numEvents);
             events->numEvents = numEvents;
             events->reserved = 0;
@@ -1338,14 +1340,18 @@ class NodeGraphEditor: public QGraphicsView {
     Q_OBJECT
 
     NodeGroup* m_nodeGroup; // not owned
-
     QGraphicsScene* m_scene;
+    QGraphicsItem* m_rootItem;
+    QMap<Node*, NodeGraphicsItem*> m_nodeItemMap;
 
 public:
+
     NodeGraphEditor(NodeGroup* nodeGroup, QWidget* parent = 0)
         : QGraphicsView(parent)
         , m_nodeGroup(nodeGroup)
-        , m_scene(0) {
+        , m_scene(0)
+        , m_rootItem(0)
+    {
 
         setFocusPolicy(Qt::StrongFocus);
 
@@ -1361,20 +1367,12 @@ public:
         setScene(m_scene);
         setRenderHint(QPainter::Antialiasing);
 
-        QGraphicsItem* rootItem = new RootGraphicsItem;
-        scene()->addItem(rootItem);
-
-
-        QMap<Node*, NodeGraphicsItem*> map;
+        m_rootItem = new RootGraphicsItem;
+        scene()->addItem(m_rootItem);
 
         // this code /will/ move at some point
         for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
-            Node* node = m_nodeGroup->childNode(i);
-            NodeGraphicsItem* item = new NodeGraphicsItem(node);
-            item->setParentItem(rootItem);
-            map[node] = item;
-
-
+            nodeAdded(m_nodeGroup->childNode(i));
         }
 
         // dodgy, but it'll do for now
@@ -1385,9 +1383,9 @@ public:
                 for (int i = 0; i < mixerNode->numInputs(); ++i) {
                     Node* inputNode = mixerNode->input(i);
                     NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
-                    map[node]->addConnectionArrow(arrow);
-                    map[inputNode]->addConnectionArrow(arrow);
-                    arrow->setParentItem(rootItem);
+                    m_nodeItemMap[node]->addConnectionArrow(arrow);
+                    m_nodeItemMap[inputNode]->addConnectionArrow(arrow);
+                    arrow->setParentItem(m_rootItem);
                 }
             }
             VstNode* vstNode = dynamic_cast<VstNode*>(node);
@@ -1395,18 +1393,32 @@ public:
                 Node* inputNode = vstNode->input();
                 if (inputNode) {
                     NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
-                    map[node]->addConnectionArrow(arrow);
-                    map[inputNode]->addConnectionArrow(arrow);
-                    arrow->setParentItem(rootItem);
+                    m_nodeItemMap[node]->addConnectionArrow(arrow);
+                    m_nodeItemMap[inputNode]->addConnectionArrow(arrow);
+                    arrow->setParentItem(m_rootItem);
                 }
             }
         }
+
+
+        connect(m_nodeGroup, SIGNAL(nodeAdded(Node*)), SLOT(nodeAdded(Node*)));
 
     }
 
 protected:
 
     virtual void keyPressEvent(QKeyEvent *event);
+
+protected slots:
+
+    void nodeAdded(Node* node)
+    {
+        //qDebug() << "NODE ADDED" << node->displayLabel();
+
+        NodeGraphicsItem* item = new NodeGraphicsItem(node);
+        item->setParentItem(m_rootItem);
+        m_nodeItemMap[node] = item;
+    }
 
 };
 
@@ -1521,12 +1533,15 @@ class NodeCreationWidget: public QLineEdit {
     NodeGroup* m_nodeGroup;
     typedef QMap<QString, Node::Factory*> FactoryMap;
     FactoryMap m_factories;
+    QPointF m_pos;
 
 public:
 
-    NodeCreationWidget(NodeGroup* nodeGroup, QWidget* parent = 0)
+    NodeCreationWidget(NodeGroup* nodeGroup, QPointF pos, QWidget* parent = 0)
         : QLineEdit(parent)
-        , m_nodeGroup(nodeGroup) {
+        , m_nodeGroup(nodeGroup)
+        , m_pos(pos)
+    {
 
         connect(this, SIGNAL(returnPressed()), SLOT(createNode()));
         // TODO: escape handling
@@ -1576,7 +1591,9 @@ private slots:
             // TODO: some kind of error feedback
             return;
         }
-        it.value()->create(m_nodeGroup);
+        Node* node = it.value()->create();
+        node->setPosition(m_pos);
+        m_nodeGroup->addNode(node);
 
         emit done();
     }
@@ -1591,7 +1608,7 @@ class NodeCreationDialog: public QDialog {
 
 public:
 
-    NodeCreationDialog(NodeGroup* nodeGroup, QWidget* parent = 0);
+    NodeCreationDialog(NodeGroup* nodeGroup, QPointF pos, QWidget* parent = 0);
 
 private:
 

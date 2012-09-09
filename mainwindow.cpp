@@ -208,6 +208,13 @@ NodeGroup::~NodeGroup() {
     }
 }
 
+void NodeGroup::addNode(Node *node)
+{
+    node->setNodeGroup(this);
+    m_nodes.push_back(node);
+    emit nodeAdded(node);
+}
+
 void graphicsItemStackOnTop(QGraphicsItem* item) {
    // this appears to be the only sensible way to re-order such that this is on top.
    // madness.
@@ -335,8 +342,11 @@ Core::~Core()
 void NodeGraphEditor::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_Tab) {
-        NodeCreationDialog d(m_nodeGroup);
-        d.move(QCursor::pos());
+        QPoint cursorPos = QCursor::pos();
+        QPointF graphPos = mapToScene(mapFromGlobal(cursorPos));
+        NodeCreationDialog d(m_nodeGroup, graphPos, this);
+        d.adjustSize();
+        d.move(cursorPos - d.rect().center());
         d.exec();
         return;
     }
@@ -344,29 +354,27 @@ void NodeGraphEditor::keyPressEvent(QKeyEvent *event)
     QGraphicsView::keyPressEvent(event);
 }
 
-Node *VstNode::Factory::create(NodeGroup *nodeGroup)
+Node *VstNode::Factory::create()
 {
-    return new VstNode(Core::instance()->vstModule(m_vstName), nodeGroup);
+    return new VstNode(Core::instance()->vstModule(m_vstName));
 }
 
-NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QWidget *parent)
+NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QPointF pos, QWidget *parent)
     : QDialog(parent, Qt::Popup)
-    , m_nodeGroup(nodeGroup) {
-
+    , m_nodeGroup(nodeGroup)
+{
     initCocoa();
 
     setWindowTitle("Create Node");
 
     QHBoxLayout* layout = new QHBoxLayout(this);
-    NodeCreationWidget* creationWidget = new NodeCreationWidget(m_nodeGroup, this);
+    NodeCreationWidget* creationWidget = new NodeCreationWidget(m_nodeGroup, pos, this);
     QLabel* label = new QLabel(tr("Create Node:"));
     layout->addWidget(label);
     layout->addWidget(creationWidget);
     connect(creationWidget, SIGNAL(done()), SLOT(accept()));
 
-
     creationWidget->setFocus();
-
 }
 
 } // namespace En
