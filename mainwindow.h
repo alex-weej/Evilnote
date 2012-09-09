@@ -1212,11 +1212,16 @@ public:
         brush = QBrush(QColor(240, 240, 240));
         painter->setBrush(brush);
         qreal radius = 10.;
-        painter->drawRoundedRect(boundingRect(), radius, radius);
 
-        // draw node label
-//        QTextOption opt(Qt::AlignCenter);
-//        painter->drawText(boundingRect(), m_node->displayLabel(), opt);
+        QPen pen(painter->pen());
+        pen.setWidthF(2.0);
+        pen.setColor(QColor(63, 63, 63));
+        painter->setPen(pen);
+
+        QRectF rect = boundingRect();
+        qreal halfPenWidth = painter->pen().widthF() / 2.;
+        rect.adjust(halfPenWidth, halfPenWidth, -halfPenWidth, -halfPenWidth);
+        painter->drawRoundedRect(rect, radius, radius);
     }
 
 
