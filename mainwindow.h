@@ -1324,8 +1324,8 @@ public:
 
         // Enable 16x multisampling for good AA in the graph
         QGLFormat glFormat;
-        glFormat.setSampleBuffers(true);
-        glFormat.setSamples(16);
+        //glFormat.setSampleBuffers(true);
+        //glFormat.setSamples(16);
         setViewport(new QGLWidget(glFormat));
         // is this necessary?
         //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
@@ -1439,6 +1439,31 @@ inline void Node::Visitor::visit(MixerNode* node) {
     visit(static_cast<Node*>(node));
 }
 
+
+
+struct VstInfo {
+    QString name;
+    QString moduleFileName;
+};
+
+
+
+class Core : public QObject {
+
+    Q_OBJECT
+
+    QMap<QString, VstInfo> m_vstInfoMap;
+    QMap<QString, VstModule*> m_vstModuleMap;
+
+public:
+
+    void scanVstDir(QDir dir);
+    void scanVstDirs();
+    VstModule* vstModule(const QString& vstName);
+
+    ~Core();
+
+};
 
 
 

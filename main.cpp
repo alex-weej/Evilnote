@@ -10,33 +10,10 @@ int main(int argc, char*argv[])
     QApplication a(argc, argv);
     a.setApplicationName("Evilnote");
 
-    QString vstFileName;
 
+    En::Core core;
 
-    //vstFileName = "/Library/Audio/Plug-Ins/VST/Massive.vst";
-    //vstFileName = "/Library/Audio/Plug-Ins/VST/Omnisphere.vst";
-    En::VstModule omnisphereModule("/Library/Audio/Plug-Ins/VST/Omnisphere.vst");
-    //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst";
-    //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
-    //vstFileName = "/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Omnisphere.vst";
-
-    //vstFileName = "/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst";
-
-    En::VstModule massiveModule("/Library/Audio/Plug-Ins/VST/Massive.vst");
-    En::VstModule fm8Module("/Library/Audio/Plug-Ins/VST/FM8.vst");
-    //En::VstModule massiveModule("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Massive.vst");
-    //En::VstModule vstModule1("/Library/Audio/Plug-Ins/VST/Omnisphere.vst");
-    En::VstModule curveCMModule("/Library/Audio/Plug-Ins/VST/CurveCM.vst");
-    En::VstModule sylenthModule("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/Sylenth1.vst");
-    //En::VstModule vstModule2("/Users/alex/Library/Audio/Plug-Ins/VST/PluginsBridgedFor64BitVSTHosts/ArtsAcousticReverb.vst");
-    En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
-    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Volcano 2.vst");
-    //En::VstModule vstModule2("/Library/Audio/Plug-Ins/VST/FabFilter Timeless 2.vst");
-
-    En::VstModule stutterModule("/Library/Audio/Plug-Ins/VST/iZotope Stutter Edit.vst");
-    En::VstModule oneModule("/Library/Audio/Plug-Ins/VST3/Steinberg/Padshop.vst3");
-    //En::VstModule ubermodModule("/Library/Audio/Plug-Ins/VST/ValhallaUberMod_x64.vst");
-
+    core.scanVstDirs();
 
     QPointF pos;
     QPointF posMove(0, 50);
@@ -47,36 +24,39 @@ int main(int argc, char*argv[])
     mixerNode->setPosition(pos += posMove);
 
 
-
-    En::VstNode* ubermod1 = new En::VstNode(&ubermodModule, rootGroup);
+    En::VstNode* ubermod1 = new En::VstNode(core.vstModule("ValhallaUberMod_x64"), rootGroup);
     ubermod1->setPosition(pos += posMove);
     mixerNode->addInput(ubermod1);
 
-    En::VstNode* vstNode = new En::VstNode(&massiveModule, rootGroup);
+    En::VstNode* vstNode = new En::VstNode(core.vstModule("Massive"), rootGroup);
     vstNode->setPosition(pos += posMove);
     ubermod1->setInput(vstNode);
 
-    vstNode = new En::VstNode(&fm8Module, rootGroup);
+    vstNode = new En::VstNode(core.vstModule("FM8"), rootGroup);
+    vstNode->setPosition(pos += posMove);
+    mixerNode->addInput(vstNode);
+
+    vstNode = new En::VstNode(core.vstModule("Absynth 5 Stereo"), rootGroup);
     vstNode->setPosition(pos += posMove);
     mixerNode->addInput(vstNode);
 
 //    En::VstNode* massive2 = new En::VstNode(&massiveModule, rootGroup);
-    En::VstNode* stutter1 = new En::VstNode(&stutterModule, rootGroup);
+    En::VstNode* stutter1 = new En::VstNode(core.vstModule("iZotope Stutter Edit"), rootGroup);
     stutter1->setPosition(pos += posMove);
 
-    En::VstNode* omnisphere1 = new En::VstNode(&omnisphereModule, rootGroup);
+    En::VstNode* omnisphere1 = new En::VstNode(core.vstModule("Omnisphere"), rootGroup);
     omnisphere1->setPosition(pos += posMove);
     mixerNode->addInput(omnisphere1);
 
-    En::VstNode* curveCM1 = new En::VstNode(&curveCMModule, rootGroup);
+    En::VstNode* curveCM1 = new En::VstNode(core.vstModule("CurveCM"), rootGroup);
     curveCM1->setPosition(pos += posMove);
     mixerNode->addInput(curveCM1);
 
-    vstNode = new En::VstNode(&sylenthModule, rootGroup);
+    vstNode = new En::VstNode(core.vstModule("Sylenth1"), rootGroup);
     vstNode->setPosition(pos += posMove);
     mixerNode->addInput(vstNode);
 
-    vstNode = new En::VstNode(&oneModule, rootGroup);
+    vstNode = new En::VstNode(core.vstModule("Padshop"), rootGroup);
     vstNode->setPosition(pos += posMove);
     mixerNode->addInput(vstNode);
 
@@ -84,7 +64,7 @@ int main(int argc, char*argv[])
     const int stressTestInstances = 0;
 
     for (int i = 0; i < stressTestInstances; ++i) {
-        En::Node* node = new En::VstNode(&massiveModule, rootGroup);
+        En::Node* node = new En::VstNode(core.vstModule("Massive"), rootGroup);
         node->setPosition(pos += posMove);
         mixerNode->addInput(node);
     }
