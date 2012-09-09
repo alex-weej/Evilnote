@@ -238,6 +238,15 @@ class Node: public QObject {
 
     Q_OBJECT
 
+public:
+
+    class Factory {
+    public:
+        virtual Node* create(NodeGroup* nodeGroup) = 0;
+    };
+
+private:
+
     NodeGroup* m_nodeGroup;
 
     // position in node graph.
@@ -326,6 +335,13 @@ class MixerNode: public Node {
 
 public:
 
+    class Factory: public Node::Factory {
+    public:
+        virtual Node* create(NodeGroup *nodeGroup) {
+            return new MixerNode(nodeGroup);
+        }
+    };
+
     MixerNode(NodeGroup* nodeGroup)
             : Node(nodeGroup) {
 
@@ -406,6 +422,19 @@ class VstNode: public Node {
 
 
 public:
+
+    class Factory: public Node::Factory {
+
+        VstModule* m_vstModule;
+
+    public:
+
+        Factory(VstModule* vstModule) : m_vstModule(vstModule) { }
+
+        virtual Node* create(NodeGroup *nodeGroup) {
+            return new VstNode(m_vstModule, nodeGroup);
+        }
+    };
 
     VstNode(VstModule* vstModule, NodeGroup* nodeGroup)
         : Node(nodeGroup)
