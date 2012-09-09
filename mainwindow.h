@@ -1308,7 +1308,7 @@ public:
         setPen(pen);
 
         QPolygonF polygon;
-        polygon << QPointF(0, 0) << QPointF(10, 5) << QPointF(8, 0) << QPointF(10, -5);
+        polygon << QPointF(0, 0) << QPointF(-12, 6) << /*QPointF(10, 0) <<*/ QPointF(-12, -6);
         m_arrowhead = new QGraphicsPolygonItem(polygon);
         m_arrowhead->setPen(Qt::NoPen);
         QBrush brush(m_arrowhead->brush());
@@ -1316,7 +1316,7 @@ public:
         m_arrowhead->setBrush(brush);
         m_arrowhead->setParentItem(this);
 
-        m_arrowtail = new QGraphicsEllipseItem(-4, -4, 8, 8);
+        m_arrowtail = new QGraphicsEllipseItem(-5, -5, 10, 10);
         m_arrowtail->setPen(Qt::NoPen);
         m_arrowtail->setBrush(brush);
         m_arrowtail->setParentItem(this);
@@ -1326,10 +1326,16 @@ public:
 
     void updatePositions() {
         // FIXME: these offsets are hardcoded...
-        setLine(QLineF(m_node->position() + QPointF(0, -20), m_inputNode->position() + QPointF(0, 20)));
-        m_arrowhead->setPos(line().p1());
-        m_arrowhead->setRotation(-line().angle());
-        m_arrowtail->setPos(line().p2());
+        QLineF arrowLine(m_inputNode->position() + QPointF(0, 20), m_node->position() + QPointF(0, -20));
+        qreal angle = arrowLine.angle();
+
+        QLineF arrowBodyLine(arrowLine);
+        arrowBodyLine.setLength(arrowBodyLine.length() - 5); // shave a bit off the line so we don't overdraw at the tip of the arrowhead.
+        setLine(arrowBodyLine);
+
+        m_arrowhead->setPos(arrowLine.p2());
+        m_arrowhead->setRotation(-angle);
+        m_arrowtail->setPos(arrowLine.p1());
     }
 
 };
