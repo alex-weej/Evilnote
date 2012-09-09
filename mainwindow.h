@@ -230,9 +230,21 @@ public:
         return m_nodes[index];
     }
 
+    const QVector<Node*>& childNodes() const {
+        return m_nodes;
+    }
+
+    // is this necessary!?
+    void emitNodeInputsChanged(Node* node)
+    {
+        emit nodeInputsChanged(node);
+    }
+
 signals:
 
     void nodeAdded(Node* node);
+
+    void nodeInputsChanged(Node* node);
 
 };
 
@@ -292,6 +304,10 @@ public:
         : m_nodeGroup(0) {
     }
 
+    virtual NodeGroup* nodeGroup() const {
+        return m_nodeGroup;
+    }
+
     void setNodeGroup(NodeGroup* nodeGroup) {
         // WARNING: this doesn't actually add this node to the group!
         m_nodeGroup = nodeGroup;
@@ -333,33 +349,56 @@ public:
 };
 
 
-class MixerNode: public Node {
-
+class MixerNode: public Node
+{
     Q_OBJECT
 
-    QVector<Node*> m_inputs;
+    QList<Node*> m_inputs;
     //QVector<QVector<float> > m_outputChannelBuffers;
 
 public:
 
-    class Factory: public Node::Factory {
+    class Factory: public Node::Factory
+    {
+
     public:
-        virtual Node* create() {
+
+        virtual Node* create()
+        {
             return new MixerNode;
         }
+
     };
 
-    MixerNode() {
+    MixerNode()
+    {
         m_outputChannelData << ChannelData("Mix L", blockSize());
         m_outputChannelData << ChannelData("Mix R", blockSize());
     }
 
-
-    void addInput(Node* node) {
+    void addInput(Node* node)
+    {
         m_inputs << node;
         inputsChanged();
     }
 
+    void removeInput(int i)
+    {
+        m_inputs.removeAt(i);
+        inputsChanged();
+    }
+
+    void removeInput(Node* node)
+    {
+        // definite bug if we allow more than one connection from the same node!
+        m_inputs.removeOne(node);
+        inputsChanged();
+    }
+
+    const QList<Node*>& inputs() const
+    {
+        return m_inputs;
+    }
 
     void inputsChanged() {
         m_inputChannelData.clear();
@@ -368,6 +407,7 @@ public:
                 m_inputChannelData << ChannelData(QString("In %1 %2").arg(QString::number(i), QString(c == 0 ? "L" : "R")), blockSize());
             }
         }
+        nodeGroup()->emitNodeInputsChanged(this);
     }
 
     unsigned numInputs() const {
@@ -418,7 +458,7 @@ class VstNode: public Node {
     QMutex m_eventQueueMutex;
     QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
-    VstNode* m_input;
+    Node* m_input;
     QString m_productName;
     NodeWindow* m_editorWindow; // move this to Node eventually
 
@@ -528,10 +568,6 @@ public:
 
     }
 
-    virtual VstNode* vstNode() {
-        return this;
-    }
-
     AEffect* vstInstance() const {
         return m_vstInstance;
     }
@@ -621,11 +657,13 @@ public:
         vstInstance()->processReplacing(vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
     }
 
-    void setInput(VstNode* vstNode) {
-        m_input = vstNode;
+    void setInput(Node* node) {
+        //qDebug() << "setting input to" << node;
+        m_input = node;
+        nodeGroup()->emitNodeInputsChanged(this);
     }
 
-    VstNode* input() {
+    Node* input() const {
         return m_input;
     }
 
@@ -930,7 +968,6 @@ public slots:
 
                 struct DependencyVisitor: public Node::Visitor {
 
-
                     typedef QMap<Node*, QSet<Node*> > NodeRelationMap;
 
                     // any need to have these separate? could be a QPair?
@@ -969,7 +1006,9 @@ public slots:
 
                 } dependencyVisitor;
 
-                dependencyVisitor.visitRecurse(outputNode);
+                Q_FOREACH (Node* node, outputNode->nodeGroup()->childNodes()) {
+                    dependencyVisitor.visitRecurse(node);
+                }
 
 
                 //qDebug() << "checkpoint before executor" << elTimer.restart();
@@ -1208,6 +1247,72 @@ public:
 void graphicsItemStackOnTop(QGraphicsItem* item);
 
 
+class InputSetter: public QObject
+{
+    Q_OBJECT
+
+    VstNode* m_node;
+
+public:
+
+    InputSetter(VstNode* node)
+        : m_node(node)
+    {
+
+    }
+
+public slots:
+
+    void setInput(QObject* inputNodeObject)
+    {
+        qDebug() << "setting input";
+        Node* inputNode = qobject_cast<Node*>(inputNodeObject);
+        // TODO: mutex
+        m_node->setInput(inputNode);
+    }
+
+    void unsetInput()
+    {
+        m_node->setInput(0);
+    }
+
+};
+
+class InputChanger: public QObject
+{
+    Q_OBJECT
+
+    MixerNode* m_node;
+
+public:
+
+    InputChanger(MixerNode* node)
+        : m_node(node)
+    {
+
+    }
+
+public slots:
+
+    void addInput(QObject* inputNodeObject)
+    {
+        //qDebug() << "adding input";
+        Node* inputNode = qobject_cast<Node*>(inputNodeObject);
+        // TODO: mutex
+        m_node->addInput(inputNode);
+    }
+
+    void removeInput(QObject* inputNodeObject)
+    {
+        //qDebug() << "removing input";
+        Node* inputNode = qobject_cast<Node*>(inputNodeObject);
+        // TODO: mutex
+        m_node->removeInput(inputNode);
+    }
+
+};
+
+
 /*
 
   random thoughts:
@@ -1262,14 +1367,23 @@ public:
         painter->drawRoundedRect(rect, radius, radius);
     }
 
-    void addConnectionArrow(NodeConnectionArrow* arrow) {
+    void addConnectionArrow(NodeConnectionArrow* arrow)
+    {
         m_connectionArrows << arrow;
+    }
+
+    void removeConnectionArrow(NodeConnectionArrow* arrow)
+    {
+        m_connectionArrows.remove(arrow);
     }
 
 protected:
 
     virtual void mousePressEvent(QGraphicsSceneMouseEvent *event);
+
     virtual void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event);
+
+    virtual void contextMenuEvent(QGraphicsSceneContextMenuEvent *event);
 
     virtual QVariant itemChange(GraphicsItemChange change, const QVariant &value)
     {
@@ -1338,6 +1452,16 @@ public:
         m_arrowtail->setPos(arrowLine.p1());
     }
 
+    Node* node() const
+    {
+        return m_node;
+    }
+
+    Node* inputNode() const
+    {
+        return m_inputNode;
+    }
+
 };
 
 
@@ -1349,6 +1473,7 @@ class NodeGraphEditor: public QGraphicsView {
     QGraphicsScene* m_scene;
     QGraphicsItem* m_rootItem;
     QMap<Node*, NodeGraphicsItem*> m_nodeItemMap;
+    QMap<Node*, QSet<NodeConnectionArrow*> > m_nodeInputArrows;
 
 public:
 
@@ -1361,18 +1486,20 @@ public:
 
         setFocusPolicy(Qt::StrongFocus);
 
-        // Enable 16x multisampling for good AA in the graph
-        QGLFormat glFormat;
-        glFormat.setSampleBuffers(true);
-        glFormat.setSamples(16);
-        setViewport(new QGLWidget(glFormat));
+        // Enable multisampling for decent AA in the graph
+        if (false) {
+            QGLFormat glFormat;
+            glFormat.setSampleBuffers(true);
+            glFormat.setSamples(4);
+            setViewport(new QGLWidget(glFormat));
+            setRenderHint(QPainter::Antialiasing);
+        }
         // is this necessary?
         //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
         m_scene = new QGraphicsScene(this);
         m_scene->setSceneRect(-1000, -1000, 2000, 2000);
         setScene(m_scene);
-        setRenderHint(QPainter::Antialiasing);
 
         m_rootItem = new RootGraphicsItem;
         scene()->addItem(m_rootItem);
@@ -1384,6 +1511,8 @@ public:
 
         // dodgy, but it'll do for now
         for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
+            nodeInputsChanged(m_nodeGroup->childNode(i));
+#if 0
             Node* node = m_nodeGroup->childNode(i);
             MixerNode* mixerNode = dynamic_cast<MixerNode*>(node);
             if (mixerNode) {
@@ -1405,10 +1534,12 @@ public:
                     arrow->setParentItem(m_rootItem);
                 }
             }
+#endif
         }
 
 
         connect(m_nodeGroup, SIGNAL(nodeAdded(Node*)), SLOT(nodeAdded(Node*)));
+        connect(m_nodeGroup, SIGNAL(nodeInputsChanged(Node*)), SLOT(nodeInputsChanged(Node*)));
 
     }
 
@@ -1425,6 +1556,48 @@ protected slots:
         NodeGraphicsItem* item = new NodeGraphicsItem(node);
         item->setParentItem(m_rootItem);
         m_nodeItemMap[node] = item;
+
+        //nodeInputsChanged(node);
+    }
+
+    void nodeInputsChanged(Node* node)
+    {
+        // FIXME: do nothing if the node isn't in the graph yet - we'll get to that after nodeAdded!
+        //qDebug() << "rejigging node inputs for node" << node->displayLabel();
+        // delete all current arrows and re-add
+        // this could probably use a re-think. contain the madness!
+        // so bored of this code, apologies that it's retarded.
+        Q_FOREACH (NodeConnectionArrow* arrow, m_nodeInputArrows[node]) {
+            m_nodeItemMap[arrow->inputNode()]->removeConnectionArrow(arrow);
+            m_nodeItemMap[node]->removeConnectionArrow(arrow);
+            delete arrow;
+        }
+        // clear set of dangling pointers
+        m_nodeInputArrows[node].clear();
+
+        MixerNode* mixerNode = dynamic_cast<MixerNode*>(node);
+        if (mixerNode) {
+            for (int i = 0; i < mixerNode->numInputs(); ++i) {
+                Node* inputNode = mixerNode->input(i);
+                NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
+                m_nodeItemMap[node]->addConnectionArrow(arrow);
+                m_nodeItemMap[inputNode]->addConnectionArrow(arrow);
+                m_nodeInputArrows[node] << arrow;
+                arrow->setParentItem(m_rootItem);
+            }
+        }
+        VstNode* vstNode = dynamic_cast<VstNode*>(node);
+        if (vstNode) {
+            Node* inputNode = vstNode->input();
+            if (inputNode) {
+                NodeConnectionArrow* arrow = new NodeConnectionArrow(node, inputNode);
+                m_nodeItemMap[node]->addConnectionArrow(arrow);
+                m_nodeItemMap[inputNode]->addConnectionArrow(arrow);
+                m_nodeInputArrows[node] << arrow;
+                arrow->setParentItem(m_rootItem);
+            }
+        }
+
     }
 
 };

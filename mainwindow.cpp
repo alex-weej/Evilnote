@@ -245,6 +245,76 @@ void NodeGraphicsItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
     m_node->openEditorWindow();
 }
 
+void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    QMenu menu;
+    VstNode* vstNode = dynamic_cast<VstNode*>(m_node);
+    if (vstNode) {
+
+
+        Node* currentInput = vstNode->input();
+        QMenu* inputMenu = new QMenu("Set Input");
+
+
+        QSignalMapper* signalMapper = new QSignalMapper(inputMenu);
+        InputSetter inputSetter(vstNode);
+        QObject::connect(signalMapper, SIGNAL(mapped(QObject*)), &inputSetter, SLOT(setInput(QObject*)));
+
+        QAction* action = inputMenu->addAction("(None)", signalMapper, SLOT(map()));
+        signalMapper->setMapping(action, (QObject*)0);
+        action->setCheckable(true);
+        action->setChecked(currentInput == 0);
+        inputMenu->addSeparator();
+
+        NodeGroup* group = vstNode->nodeGroup();
+        Q_FOREACH (Node* childNode, group->childNodes()) {
+            QAction* action = inputMenu->addAction(childNode->displayLabel(), signalMapper, SLOT(map()));
+            signalMapper->setMapping(action, childNode);
+            action->setCheckable(true);
+            action->setChecked(childNode == currentInput);
+        }
+
+        menu.addMenu(inputMenu);
+
+        menu.exec(event->screenPos());
+
+    }
+
+    MixerNode* mixerNode = dynamic_cast<MixerNode*>(m_node);
+    if (mixerNode) {
+
+        QList<Node*> currentInputs = mixerNode->inputs();
+        QMenu* addInputMenu = new QMenu("Add Input");
+        QMenu* removeInputMenu = new QMenu("Remove Input");
+
+        InputChanger inputChanger(mixerNode);
+        QSignalMapper* signalMapperAdd = new QSignalMapper(addInputMenu);
+        QSignalMapper* signalMapperRemove = new QSignalMapper(removeInputMenu);
+        QObject::connect(signalMapperAdd, SIGNAL(mapped(QObject*)), &inputChanger, SLOT(addInput(QObject*)));
+        QObject::connect(signalMapperRemove, SIGNAL(mapped(QObject*)), &inputChanger, SLOT(removeInput(QObject*)));
+
+        NodeGroup* group = mixerNode->nodeGroup();
+        Q_FOREACH (Node* childNode, group->childNodes()) {
+            QAction* action = addInputMenu->addAction(childNode->displayLabel(), signalMapperAdd, SLOT(map()));
+            signalMapperAdd->setMapping(action, childNode);
+        }
+
+        Q_FOREACH (Node* inputNode, currentInputs) {
+            QAction* action = removeInputMenu->addAction(inputNode->displayLabel(), signalMapperRemove, SLOT(map()));
+            signalMapperRemove->setMapping(action, inputNode);
+        }
+
+        menu.addMenu(addInputMenu);
+        menu.addMenu(removeInputMenu);
+
+        menu.exec(event->screenPos());
+    }
+
+
+
+
+}
+
 void NodeGraphicsItem::updateConnectionArrows() const {
     Q_FOREACH (NodeConnectionArrow* arrow, m_connectionArrows) {
         arrow->updatePositions();
