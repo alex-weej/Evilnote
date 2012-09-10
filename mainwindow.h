@@ -1043,6 +1043,7 @@ public slots:
                 struct SerialNodeExecutor: public Node::Visitor {
 
                     DependencyVisitor& dependencyVisitor;
+                    QSet<Node*> visited;
 
                     SerialNodeExecutor(DependencyVisitor& d) : dependencyVisitor(d) {}
 
@@ -1073,13 +1074,21 @@ public slots:
                         //qDebug() << "------------------------";
 
                         Q_FOREACH (Node* node, nodeQueue) {
-                            node->accept(*this);
+                            dispatch(node);
                         }
+                    }
+
+                    void dispatch(Node* node) {
+                        if (visited.contains(node)) {
+                            return;
+                        }
+                        visited << node;
+                        node->accept(*this);
                     }
 
                     void postVisit(Node* node) {
                         Q_FOREACH (Node* dependentNode, dependencyVisitor.dependentMap[node]) {
-                            dependentNode->accept(*this);
+                            dispatch(dependentNode);
                         }
                     }
 
