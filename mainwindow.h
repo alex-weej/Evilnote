@@ -531,23 +531,30 @@ public:
             }
         }
 
+        // the AEffect::numInputs / numOutputs fields are the final word on IO config. Make sure we're set up right,
+        // even if the effGetOutputProperties opcode lied to us.
+
+        if (m_vstInstance->numInputs != numInputChannels() || m_vstInstance->numOutputs != numOutputChannels()) {
+
+            if (numInputChannels() != 0 || numOutputChannels() != 0) {
+                qDebug() << "WARNING: plugins input/output properties don't match actual number of inputs/outputs!";
+            }
+
+            m_inputChannelData.clear();
+            for (int c = 0; c < m_vstInstance->numInputs; ++c) {
+                m_inputChannelData << ChannelData(QString("In %2").arg(QString::number(c)), blockSize());
+            }
+
+            m_outputChannelData.clear();
+            for (int c = 0; c < m_vstInstance->numOutputs; ++c) {
+                m_outputChannelData << ChannelData(QString("Out %2").arg(QString::number(c)), blockSize());
+            }
+        }
+
+
         qDebug() << "inputs:" << numInputChannels();
         qDebug() << "outputs:" << numOutputChannels();
 
-
-        // HACK HACK HACK
-        // not sure why some plugins do this. there MUST be a better way to get the plugin configuration...
-        // default to 2 in 2 out just so we can actually use these plugins without crashing.
-
-        if (numInputChannels() == 0 && numOutputChannels() == 0) {
-
-            qDebug() << "WARNING: looks like this plugin is reporting 0/0 IO. Configuring as 2/2 instead.";
-
-            for (int c = 0; c < 2; ++c) {
-                m_inputChannelData << ChannelData(QString("In %2").arg(QString(c == 0 ? "L" : "R")), blockSize());
-                m_outputChannelData << ChannelData(QString("Out %2").arg(QString(c == 0 ? "L" : "R")), blockSize());
-            }
-        }
 
 //        VstSpeakerArrangement inputSpeakerArr = {kSpeakerArrStereo, 2};
 //        VstSpeakerArrangement outputSpeakerArr = {kSpeakerArrStereo, 2};

@@ -21,12 +21,6 @@ int main(int argc, char*argv[])
     mixerNode->setPosition(QPointF(0, 0));
     rootGroup->addNode(mixerNode);
 
-
-    En::VstNode* vstNode = new En::VstNode(core.vstModule("Massive"));
-    vstNode->setPosition(QPointF(0, -100));
-    rootGroup->addNode(vstNode);
-    mixerNode->addInput(vstNode);
-
     En::HostThread* hostThread = new En::HostThread(mixerNode);
     hostThread->start(QThread::TimeCriticalPriority);
 
