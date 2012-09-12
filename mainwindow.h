@@ -386,6 +386,8 @@ public:
         }
     }
 
+    virtual void processAudio() = 0;
+
 };
 
 
@@ -659,36 +661,7 @@ public:
         m_eventQueue[m_eventQueueWriteIndex].push_back(event);
     }
 
-    void processEvents() {
-        // Take a reference to the event queue, and buffer swap
-        QMutexLocker locker(&m_eventQueueMutex);
-        QVector<VstEvent*>& eventQueue = m_eventQueue[m_eventQueueWriteIndex];
-        m_eventQueueWriteIndex = !m_eventQueueWriteIndex;
-        locker.unlock();
-
-        size_t numEvents = eventQueue.size();
-        if (numEvents) {
-            //qDebug() << "processing events" << numEvents;
-            VstEvents* events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * numEvents);
-            events->numEvents = numEvents;
-            events->reserved = 0;
-            std::copy(eventQueue.begin(), eventQueue.end(), &events->events[0]);
-            eventQueue.clear();
-
-            events->events[numEvents] = 0;
-            vstInstance()->dispatcher (vstInstance(), effProcessEvents, 0, 0, events, 0);
-
-            // Think I need to free the events here. This could be done in a different thread?
-            for (unsigned i = 0; i < numEvents; ++i) {
-                free(events->events[i]);
-            }
-
-        }
-    }
-
     void processAudio() {
-
-        const int blockSize = 512; // temp hack!
 
         int numInputOutputChannels = 0;
         if (input()) {
@@ -715,7 +688,33 @@ public:
             outputFloats[c] = outputChannelBuffer(c);
         }
 
-        vstInstance()->processReplacing(vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize);
+        // Take a reference to the event queue, and buffer swap
+        QMutexLocker locker(&m_eventQueueMutex);
+        QVector<VstEvent*>& eventQueue = m_eventQueue[m_eventQueueWriteIndex];
+        m_eventQueueWriteIndex = !m_eventQueueWriteIndex;
+        locker.unlock();
+
+        size_t numEvents = eventQueue.size();
+        VstEvents* events = 0;
+        if (numEvents) {
+            //qDebug() << "processing events" << numEvents;
+            events = (VstEvents*)malloc(sizeof(VstEvents) + sizeof(VstEvent*) * numEvents);
+            events->numEvents = numEvents;
+            events->reserved = 0;
+            std::copy(eventQueue.begin(), eventQueue.end(), &events->events[0]);
+            eventQueue.clear();
+
+            events->events[numEvents] = 0;
+            vstInstance()->dispatcher (vstInstance(), effProcessEvents, 0, 0, events, 0);
+        }
+
+        vstInstance()->processReplacing(vstInstance(), const_cast<float**>(inputFloats), outputFloats, blockSize());
+
+        // Think I need to free the events here. This could be done in a different thread?
+        for (unsigned i = 0; i < numEvents; ++i) {
+            free(events->events[i]);
+        }
+        free(events);
     }
 
     void setInput(Node* node) {
@@ -1092,9 +1091,6 @@ public slots:
                 //outputNode->accept(dependencyVisitor);
                 // TODO: fix the above so it only happens when the graph changes. no need to recalculate dependencies on every single buffer generation
 
-
-                //qApp->exit();
-
                 struct SerialNodeExecutor: public Node::Visitor {
 
                     DependencyVisitor& dependencyVisitor;
@@ -1141,33 +1137,22 @@ public slots:
                         node->accept(*this);
                     }
 
-                    void postVisit(Node* node) {
+                    virtual void visit(Node* node)
+                    {
+                        node->processAudio();
+
                         Q_FOREACH (Node* dependentNode, dependencyVisitor.dependentMap[node]) {
                             dispatch(dependentNode);
                         }
-                    }
-
-                    virtual void visit(MixerNode* mixerNode) {
-                        mixerNode->processAudio();
-                        postVisit(mixerNode);
-                    }
-
-                    virtual void visit(VstNode* vstNode) {
-                        vstNode->processEvents();
-                        vstNode->processAudio();
-                        postVisit(vstNode);
                     }
 
                 } executor(dependencyVisitor);
 
                 executor.execute();
 
-
                 //qDebug() << "checkpoint before buffer write" << elTimer.restart();
 
                 // FIXME: what if output node does not have 2 outputs? deal with it.
-
-
 
                 // convert float data buffers to our audio format
 
