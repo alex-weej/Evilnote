@@ -1585,15 +1585,14 @@ public:
         setFocusPolicy(Qt::StrongFocus);
 
         // Enable multisampling for AA in the graph
-        if (true) {
+        // arse. enabling this causes us to somehow lose our graphics buffer when fiddling with CurveCM's interface
+        if (false) {
             QGLFormat glFormat;
             glFormat.setSampleBuffers(true);
             glFormat.setSamples(4);
-            glFormat.setSwapInterval(0);
-            qDebug() << "swap interval" << glFormat.swapInterval();
             setViewport(new QGLWidget(glFormat));
-            setRenderHint(QPainter::Antialiasing);
         }
+        setRenderHint(QPainter::Antialiasing);
 
         m_scene = new QGraphicsScene(this);
         m_scene->setSceneRect(-1000, -1000, 2000, 2000);
