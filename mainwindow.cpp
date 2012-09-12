@@ -185,6 +185,12 @@ void NodeGroup::removeNode(Node *node)
     emit nodeRemoved(node);
 }
 
+void NodeGroup::deleteNode(Node *node)
+{
+    removeNode(node);
+    delete node;
+}
+
 QList<Node *> NodeGroup::dependentNodes(Node *node) const
 {
     QList<Node*> deps;
@@ -319,9 +325,6 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
     delete helper;
 
-
-
-
 }
 
 void NodeGraphicsItem::updateConnectionArrows() const {
@@ -418,19 +421,18 @@ Core::~Core()
     }
 }
 
-void NodeGraphEditor::keyPressEvent(QKeyEvent *event)
+void NodeGraphEditor::launchNodeCreationDialog()
 {
-    if (event->key() == Qt::Key_Tab) {
-        QPoint cursorPos = QCursor::pos();
-        QPointF graphPos = mapToScene(mapFromGlobal(cursorPos));
-        NodeCreationDialog d(m_nodeGroup, graphPos, this);
-        d.adjustSize();
-        d.move(cursorPos - d.rect().center());
-        d.exec();
-        return;
+    QPoint cursorPos = QCursor::pos();
+    QPointF graphPos = mapToScene(mapFromGlobal(cursorPos));
+    NodeCreationDialog d(m_nodeGroup, graphPos, this);
+    d.adjustSize();
+    d.move(cursorPos - d.rect().center());
+    d.exec();
+    if (d.createdNode()) {
+        scene()->clearSelection();
+        m_nodeItemMap[d.createdNode()]->setSelected(true);
     }
-
-    QGraphicsView::keyPressEvent(event);
 }
 
 Node *VstNode::Factory::create()
@@ -441,6 +443,7 @@ Node *VstNode::Factory::create()
 NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QPointF pos, QWidget *parent)
     : QDialog(parent, Qt::Popup)
     , m_nodeGroup(nodeGroup)
+    , m_createdNode(0)
 {
     initCocoa();
 
@@ -451,9 +454,16 @@ NodeCreationDialog::NodeCreationDialog(NodeGroup *nodeGroup, QPointF pos, QWidge
     QLabel* label = new QLabel(tr("Create Node:"));
     layout->addWidget(label);
     layout->addWidget(creationWidget);
-    connect(creationWidget, SIGNAL(done()), SLOT(accept()));
+    connect(creationWidget, SIGNAL(nodeCreated(Node*)), SLOT(nodeCreated(Node*)));
 
     creationWidget->setFocus();
 }
+
+void NodeCreationDialog::nodeCreated(Node *newNode)
+{
+    m_createdNode = newNode;
+    accept();
+}
+
 
 } // namespace En

@@ -225,6 +225,8 @@ public:
 
     void removeNode(Node* node);
 
+    void deleteNode(Node* node);
+
     unsigned numChildNodes() const {
         return m_nodes.size();
     }
@@ -309,7 +311,17 @@ public:
     static const float* s_nullInputBuffer;
 
     Node()
-        : m_nodeGroup(0) {
+        : m_nodeGroup(0)
+    {
+    }
+
+    virtual ~Node()
+    {
+        // disable this for now - we break because by this point
+        // of destruction we cannot check our own inputs!
+//        if (nodeGroup()) {
+//            nodeGroup()->removeNode(this);
+//        }
     }
 
     virtual NodeGroup* nodeGroup() const {
@@ -1334,7 +1346,6 @@ public slots:
 
     void deleteNode()
     {
-        m_node->nodeGroup()->removeNode(m_node);
         delete m_node;
     }
 
@@ -1444,6 +1455,11 @@ public:
         label->setText(m_node->displayLabel());
         label->setPos(-label->boundingRect().width() / 2.0, -label->boundingRect().height() / 2.0);
 
+    }
+
+    Node* node() const
+    {
+        return m_node;
     }
 
     QRectF boundingRect() const {
@@ -1648,11 +1664,11 @@ public:
         connect(m_nodeGroup, SIGNAL(nodePreRemoved(Node*)), SLOT(nodePreRemoved(Node*)));
         connect(m_nodeGroup, SIGNAL(nodeInputsChanged(Node*)), SLOT(nodeInputsChanged(Node*)));
 
+        QShortcut* shortcut = 0;
+        shortcut = new QShortcut(Qt::Key_Tab, this, SLOT(launchNodeCreationDialog()));
+        shortcut = new QShortcut(Qt::Key_Delete, this, SLOT(deleteSelected()));
+
     }
-
-protected:
-
-    virtual void keyPressEvent(QKeyEvent *event);
 
 protected slots:
 
@@ -1671,7 +1687,6 @@ protected slots:
     {
         // FIXME: don't assume the connections have already been removed.
         // we need to do that before deleting this object!
-        qDebug() << "deleting node from scene";
         delete m_nodeItemMap[node];
     }
 
@@ -1714,6 +1729,19 @@ protected slots:
         }
 
     }
+
+    void deleteSelected()
+    {
+        Q_FOREACH (QGraphicsItem* item, scene()->selectedItems()) {
+            NodeGraphicsItem* nodeItem = qgraphicsitem_cast<NodeGraphicsItem*>(item);
+            if (nodeItem) {
+                Node* node = nodeItem->node();
+                m_nodeGroup->deleteNode(node);
+            }
+        }
+    }
+
+    void launchNodeCreationDialog();
 
 };
 
@@ -1871,7 +1899,7 @@ public:
 
 signals:
 
-    void done();
+    void nodeCreated(Node*);
 
 private slots:
 
@@ -1896,7 +1924,7 @@ private slots:
         node->setPosition(m_pos);
         m_nodeGroup->addNode(node);
 
-        emit done();
+        emit nodeCreated(node);
     }
 
 };
@@ -1906,14 +1934,24 @@ class NodeCreationDialog: public QDialog {
     Q_OBJECT
 
     NodeGroup* m_nodeGroup;
+    Node* m_createdNode;
 
 public:
 
     NodeCreationDialog(NodeGroup* nodeGroup, QPointF pos, QWidget* parent = 0);
 
+    Node* createdNode() const
+    {
+        return m_createdNode;
+    }
+
 private:
 
     void initCocoa();
+
+private slots:
+
+    void nodeCreated(Node* newNode);
 
 };
 

@@ -119,7 +119,4 @@ void NodeCreationDialog::initCocoa()
 
 }
 
-
-
-
 } // namespace En
