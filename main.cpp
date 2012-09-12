@@ -10,7 +10,6 @@ int main(int argc, char*argv[])
     QApplication a(argc, argv);
     a.setApplicationName("Evilnote");
 
-
     En::Core core;
 
     core.scanVstDirs();

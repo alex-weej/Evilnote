@@ -120,15 +120,17 @@ inline VstIntPtr hostCallback (AEffect* effect, VstInt32 opcode, VstInt32 index,
     return result;
 }
 
-
 class VstModule: public QObject {
+
     Q_OBJECT
 
 private:
+
     CFBundleRef m_bundle;
     PluginEntryProc m_mainProc;
 
 public:
+
     VstModule(const QString& fileName) : m_bundle(0), m_mainProc(0) {
         load(fileName);
     }
@@ -151,6 +153,7 @@ public:
     }
 
 private:
+
     bool load(const QString& fileName) {
 
         CFStringRef fileNameString = CFStringCreateWithCString(0, fileName.toUtf8(), kCFStringEncodingUTF8);
@@ -199,9 +202,6 @@ private:
         m_mainProc = 0;
     }
 
-
-
-
 };
 
 class Node;
@@ -214,6 +214,7 @@ class NodeGroup: public QObject {
 
     Q_OBJECT
 
+    // maybe change this to a QSet? can it be ordered?
     QVector<Node*> m_nodes;
 
 public:
@@ -221,6 +222,8 @@ public:
     virtual ~NodeGroup();
 
     void addNode(Node* node);
+
+    void removeNode(Node* node);
 
     unsigned numChildNodes() const {
         return m_nodes.size();
@@ -234,6 +237,9 @@ public:
         return m_nodes;
     }
 
+    /// Very slow way to get the node dependencies. TODO: cache this somehow? Or maintain node connections separately...
+    QList<Node*> dependentNodes(Node* node) const;
+
     // is this necessary!?
     void emitNodeInputsChanged(Node* node)
     {
@@ -243,6 +249,8 @@ public:
 signals:
 
     void nodeAdded(Node* node);
+    void nodePreRemoved(Node* node);
+    void nodeRemoved(Node* node);
 
     void nodeInputsChanged(Node* node);
 
@@ -346,6 +354,26 @@ public:
         // do nothing
     }
 
+    virtual QList<Node*> inputs() const = 0;
+
+    virtual void removeInput(Node* node) = 0;
+
+    void disconnectNode()
+    {
+        if (nodeGroup()) {
+
+            Q_FOREACH (Node* node, inputs()) {
+                removeInput(node);
+            }
+            nodeGroup()->emitNodeInputsChanged(this);
+
+            Q_FOREACH (Node* depNode, nodeGroup()->dependentNodes(this)) {
+                depNode->removeInput(this);
+            }
+
+        }
+    }
+
 };
 
 
@@ -395,7 +423,7 @@ public:
         inputsChanged();
     }
 
-    const QList<Node*>& inputs() const
+    QList<Node*> inputs() const
     {
         return m_inputs;
     }
@@ -686,6 +714,20 @@ public:
 
     Node* input() const {
         return m_input;
+    }
+
+    QList<Node*> inputs() const
+    {
+        QList<Node*> ret;
+        ret << m_input;
+        return ret;
+    }
+
+    void removeInput(Node* node) {
+        if (m_input == node) {
+            m_input = 0;
+            nodeGroup()->emitNodeInputsChanged(this);
+        }
     }
 
     virtual void openEditorWindow();
@@ -1278,19 +1320,37 @@ public:
 void graphicsItemStackOnTop(QGraphicsItem* item);
 
 
-class InputSetter: public QObject
+class NodeContextMenuHelper : public QObject
 {
     Q_OBJECT
 
-    VstNode* m_node;
+public:
+
+    NodeContextMenuHelper(Node* node) : m_node(node) {}
+
+    virtual ~NodeContextMenuHelper() {}
+
+public slots:
+
+    void deleteNode()
+    {
+        m_node->nodeGroup()->removeNode(m_node);
+        delete m_node;
+    }
+
+protected:
+
+    Node* m_node;
+
+};
+
+class VstNodeContextMenuHelper : public NodeContextMenuHelper
+{
+    Q_OBJECT
 
 public:
 
-    InputSetter(VstNode* node)
-        : m_node(node)
-    {
-
-    }
+    VstNodeContextMenuHelper(Node* node) : NodeContextMenuHelper(node) {}
 
 public slots:
 
@@ -1299,29 +1359,30 @@ public slots:
         qDebug() << "setting input";
         Node* inputNode = qobject_cast<Node*>(inputNodeObject);
         // TODO: mutex
-        m_node->setInput(inputNode);
+        vstNode()->setInput(inputNode);
     }
 
     void unsetInput()
     {
-        m_node->setInput(0);
+        vstNode()->setInput(0);
+    }
+
+private:
+
+    VstNode* vstNode() const
+    {
+        return static_cast<VstNode*>(m_node);
     }
 
 };
 
-class InputChanger: public QObject
+class MixerNodeContextMenuHelper : public NodeContextMenuHelper
 {
     Q_OBJECT
 
-    MixerNode* m_node;
-
 public:
 
-    InputChanger(MixerNode* node)
-        : m_node(node)
-    {
-
-    }
+    MixerNodeContextMenuHelper(Node* node) : NodeContextMenuHelper(node) {}
 
 public slots:
 
@@ -1330,7 +1391,7 @@ public slots:
         //qDebug() << "adding input";
         Node* inputNode = qobject_cast<Node*>(inputNodeObject);
         // TODO: mutex
-        m_node->addInput(inputNode);
+        mixerNode()->addInput(inputNode);
     }
 
     void removeInput(QObject* inputNodeObject)
@@ -1338,9 +1399,15 @@ public slots:
         //qDebug() << "removing input";
         Node* inputNode = qobject_cast<Node*>(inputNodeObject);
         // TODO: mutex
-        m_node->removeInput(inputNode);
+        mixerNode()->removeInput(inputNode);
     }
 
+private:
+
+    MixerNode* mixerNode() const
+    {
+        return static_cast<MixerNode*>(m_node);
+    }
 };
 
 
@@ -1570,6 +1637,7 @@ public:
 
 
         connect(m_nodeGroup, SIGNAL(nodeAdded(Node*)), SLOT(nodeAdded(Node*)));
+        connect(m_nodeGroup, SIGNAL(nodePreRemoved(Node*)), SLOT(nodePreRemoved(Node*)));
         connect(m_nodeGroup, SIGNAL(nodeInputsChanged(Node*)), SLOT(nodeInputsChanged(Node*)));
 
     }
@@ -1589,6 +1657,14 @@ protected slots:
         m_nodeItemMap[node] = item;
 
         //nodeInputsChanged(node);
+    }
+
+    void nodePreRemoved(Node* node)
+    {
+        // FIXME: don't assume the connections have already been removed.
+        // we need to do that before deleting this object!
+        qDebug() << "deleting node from scene";
+        delete m_nodeItemMap[node];
     }
 
     void nodeInputsChanged(Node* node)

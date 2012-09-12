@@ -176,6 +176,42 @@ void NodeGroup::addNode(Node *node)
     emit nodeAdded(node);
 }
 
+void NodeGroup::removeNode(Node *node)
+{
+    node->disconnectNode();
+    emit nodePreRemoved(node);
+    m_nodes.remove(m_nodes.indexOf(node));
+    node->setNodeGroup(0);
+    emit nodeRemoved(node);
+}
+
+QList<Node *> NodeGroup::dependentNodes(Node *node) const
+{
+    QList<Node*> deps;
+
+    Q_FOREACH (Node* testNode, m_nodes) {
+        VstNode* vstNode = dynamic_cast<VstNode*>(testNode);
+        if (vstNode) {
+            if (vstNode->input() == node) {
+                deps << testNode;
+            }
+            continue;
+        }
+
+        MixerNode* mixerNode = dynamic_cast<MixerNode*>(testNode);
+        if (mixerNode) {
+            Q_FOREACH (Node* mixerInput, mixerNode->inputs()) {
+                if (mixerInput == node) {
+                    deps << testNode;
+                }
+            }
+            continue;
+        }
+    }
+
+    return deps;
+}
+
 void graphicsItemStackOnTop(QGraphicsItem* item) {
    // this appears to be the only sensible way to re-order such that this is on top.
    // madness.
@@ -210,16 +246,22 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
     QMenu menu;
     VstNode* vstNode = dynamic_cast<VstNode*>(m_node);
+
+    NodeContextMenuHelper* helper = 0;
+
+    // maybe this is a sign we need to split this NodeGraphicsItem class...
+    // or maybe we should just unify the Node interface.
     if (vstNode) {
 
 
         Node* currentInput = vstNode->input();
         QMenu* inputMenu = new QMenu("Set Input");
 
-
         QSignalMapper* signalMapper = new QSignalMapper(inputMenu);
-        InputSetter inputSetter(vstNode);
-        QObject::connect(signalMapper, SIGNAL(mapped(QObject*)), &inputSetter, SLOT(setInput(QObject*)));
+        VstNodeContextMenuHelper* vstHelper = new VstNodeContextMenuHelper(vstNode);
+        helper = vstHelper;
+
+        QObject::connect(signalMapper, SIGNAL(mapped(QObject*)), vstHelper, SLOT(setInput(QObject*)));
 
         QAction* action = inputMenu->addAction("(None)", signalMapper, SLOT(map()));
         signalMapper->setMapping(action, (QObject*)0);
@@ -237,8 +279,6 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
         menu.addMenu(inputMenu);
 
-        menu.exec(event->screenPos());
-
     }
 
     MixerNode* mixerNode = dynamic_cast<MixerNode*>(m_node);
@@ -248,11 +288,12 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         QMenu* addInputMenu = new QMenu("Add Input");
         QMenu* removeInputMenu = new QMenu("Remove Input");
 
-        InputChanger inputChanger(mixerNode);
+        MixerNodeContextMenuHelper* mixerHelper = new MixerNodeContextMenuHelper(mixerNode);
+        helper = mixerHelper;
         QSignalMapper* signalMapperAdd = new QSignalMapper(addInputMenu);
         QSignalMapper* signalMapperRemove = new QSignalMapper(removeInputMenu);
-        QObject::connect(signalMapperAdd, SIGNAL(mapped(QObject*)), &inputChanger, SLOT(addInput(QObject*)));
-        QObject::connect(signalMapperRemove, SIGNAL(mapped(QObject*)), &inputChanger, SLOT(removeInput(QObject*)));
+        QObject::connect(signalMapperAdd, SIGNAL(mapped(QObject*)), mixerHelper, SLOT(addInput(QObject*)));
+        QObject::connect(signalMapperRemove, SIGNAL(mapped(QObject*)), mixerHelper, SLOT(removeInput(QObject*)));
 
         NodeGroup* group = mixerNode->nodeGroup();
         Q_FOREACH (Node* childNode, group->childNodes()) {
@@ -268,8 +309,13 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         menu.addMenu(addInputMenu);
         menu.addMenu(removeInputMenu);
 
-        menu.exec(event->screenPos());
     }
+
+    menu.addAction("Delete", helper, SLOT(deleteNode()));
+
+    menu.exec(event->screenPos());
+
+    delete helper;
 
 
 
