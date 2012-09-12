@@ -14,55 +14,16 @@ NodeWindow::NodeWindow(En::VstNode* vstNode, QWidget *parent) :
 {
     ui->setupUi(this);
 
-    //interface->show();
-
-//    En::VstInterfaceWidget* interface = new En::VstInterfaceWidget(vstNode, this);
-//    ui->vstPlaceholder->addWidget(interface);
-//    QLineEdit* le = new QLineEdit;
-//    ui->vstPlaceholder->addWidget(le);
+    setWindowTitle(m_vstNode->displayLabel());
 
     QVBoxLayout* layout = new QVBoxLayout(ui->vstPlaceholder);
     En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode, ui->vstPlaceholder);
     layout->addWidget(interface);
-    //En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode);
-
-//    QWidget* popup = new QWidget;
-//    QVBoxLayout* pLayout = new QVBoxLayout(popup);
-//    pLayout->addWidget(new QLabel("VST EDITOR"));
-//    pLayout->addWidget(interface);
-//    popup->show();
-
-
 
     m_vstEditorWidget = interface;
 
-    //layout->addWidget(interface);
-
-    //En::VstEditorWidget* interface = new En::VstEditorWidget(vstNode);
-    //interface->show();
-    //interface->raise();
-
     m_funkyTownPos = 0;
     m_funkyTown << 0 << 0 << -2 << 0 << -5 << -5 << 0 << 5 << 4 << 0;
-
-
-    //En::VstInterfaceWidget* interface = new En::VstInterfaceWidget(vstNode, this);
-    //setCentralWidget(interface);
-
-    //ui->verticalLayout->addWidget(interface);
-    //layout.addWidget(interface);
-    //setCentralWidget(interface);
-
-    //QPushButton* interface = new QPushButton("HELLO");
-
-    //centralWidget()->layout()->addWidget(interface);
-
-    //interface->resize(QSize(500, 500));
-    //this->setCentralWidget(interface);
-
-    //setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    //ui->vstPlaceholder->setFixedSize(interface->sizeHint());
-
 }
 
 NodeWindow::~NodeWindow()
