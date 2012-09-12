@@ -33,7 +33,18 @@ void VstEditorWidget::showEvent(QShowEvent* event) {
 
     Q_ASSERT(m_view == 0);
 
-    vstInstance->dispatcher(vstInstance, effEditOpen, 0, 0, (void*)superview, 0);
+    //qDebug() << "opening effect editor";
+    try {
+        vstInstance->dispatcher(vstInstance, effEditOpen, 0, 0, (void*)superview, 0);
+    } catch (const std::exception& e) {
+        qCritical() << "ERROR: effect editor threw an exception:" << e.what();
+        return QMacCocoaViewContainer::showEvent(event);
+    } catch (...) {
+        qCritical() << "ERROR: effect editor threw an unknown exception";
+        return QMacCocoaViewContainer::showEvent(event);
+    }
+    //qDebug() << "effect editor opened!";
+
     subviews = [superview subviews];
     Q_ASSERT([subviews count] == 1);
 
