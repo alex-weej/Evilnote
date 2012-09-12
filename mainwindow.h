@@ -1433,6 +1433,8 @@ public:
 
         setFlag(ItemIsMovable);
         setFlag(ItemSendsGeometryChanges);
+        //setFlag(ItemIsFocusable);
+        setFlag(ItemIsSelectable);
 
         setAcceptHoverEvents(true);
 
@@ -1450,7 +1452,12 @@ public:
 
     void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget) {
         QBrush brush;
-        brush = QBrush(QColor(240, 240, 240));
+        if (isSelected()) {
+            brush = widget->palette().highlight();
+        } else {
+            //brush = QBrush(QColor(240, 240, 240));
+            brush = widget->palette().button();
+        }
         painter->setBrush(brush);
         // FIXME: use a standard brush somehow? or just use a palette
         qreal radius = 10.;
@@ -1593,6 +1600,8 @@ public:
             setViewport(new QGLWidget(glFormat));
         }
         setRenderHint(QPainter::Antialiasing);
+
+        setDragMode(QGraphicsView::RubberBandDrag);
 
         m_scene = new QGraphicsScene(this);
         m_scene->setSceneRect(-1000, -1000, 2000, 2000);

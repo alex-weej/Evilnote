@@ -244,6 +244,9 @@ void NodeGraphicsItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)
 
 void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
+    scene()->clearSelection();
+    setSelected(true);
+
     QMenu menu;
     VstNode* vstNode = dynamic_cast<VstNode*>(m_node);
 
@@ -252,7 +255,6 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     // maybe this is a sign we need to split this NodeGraphicsItem class...
     // or maybe we should just unify the Node interface.
     if (vstNode) {
-
 
         Node* currentInput = vstNode->input();
         QMenu* inputMenu = new QMenu("Set Input");
