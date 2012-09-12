@@ -825,7 +825,8 @@ public slots:
             uint64_t thisTime = mach_absolute_time();
             uint64_t elapsed = thisTime - m_lastProfiledTime;
             uint64_t elapsedNano = *(uint64_t*) &AbsoluteToNanoseconds( *(AbsoluteTime *) &elapsed );
-            if (elapsedNano > 2e8) {
+            // once every second...
+            if (elapsedNano > 1e9) {
                 uint64_t busyNano = *(uint64_t*) &AbsoluteToNanoseconds( *(AbsoluteTime *) &m_busyAccumulatedTime );
                 float utilisationAmount = (double)busyNano / elapsedNano;
                 emit utilisation(utilisationAmount);
@@ -1516,16 +1517,16 @@ public:
 
         setFocusPolicy(Qt::StrongFocus);
 
-        // Enable multisampling for decent AA in the graph
-        if (false) {
+        // Enable multisampling for AA in the graph
+        if (true) {
             QGLFormat glFormat;
             glFormat.setSampleBuffers(true);
             glFormat.setSamples(4);
+            glFormat.setSwapInterval(0);
+            qDebug() << "swap interval" << glFormat.swapInterval();
             setViewport(new QGLWidget(glFormat));
             setRenderHint(QPainter::Antialiasing);
         }
-        // is this necessary?
-        //setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
         m_scene = new QGraphicsScene(this);
         m_scene->setSceneRect(-1000, -1000, 2000, 2000);
@@ -1637,7 +1638,9 @@ class MainWindow: public QMainWindow {
 
     Q_OBJECT
 
-    QProgressBar* m_utilisationMeter;
+    // don't use this ATM - native style on Mac makes the framerate cap for some reason!
+    //QProgressBar* m_utilisationMeter;
+    QLabel* m_utilisationText;
     NodeGroup* m_group;
 
 public:
@@ -1653,10 +1656,11 @@ public:
         QVBoxLayout* mainLayout = new QVBoxLayout(widget);
         setCentralWidget(widget);
 
-        m_utilisationMeter = new QProgressBar(this);
-        m_utilisationMeter->setRange(0, INT_MAX);
+        //m_utilisationMeter = new QProgressBar();
+        //m_utilisationMeter->show();
+        //m_utilisationMeter->setRange(0, INT_MAX);
 
-        mainLayout->addWidget(m_utilisationMeter);
+        //mainLayout->addWidget(m_utilisationMeter);
         //setCentralWidget(m_utilisationMeter);
 
 #if 0
@@ -1669,15 +1673,18 @@ public:
 
 
         NodeGraphEditor* graph = new NodeGraphEditor(group);
-
         mainLayout->addWidget(graph);
+
+        m_utilisationText = new QLabel();
+        statusBar()->addPermanentWidget(m_utilisationText);
 
     }
 
 public slots:
 
     void utilisation(float utilisationAmount) {
-        m_utilisationMeter->setValue(utilisationAmount * INT_MAX);
+        //m_utilisationMeter->setValue(utilisationAmount * INT_MAX);
+        m_utilisationText->setText(tr("CPU: %1%").arg(QString::number(utilisationAmount * 100, 'f', 0)));
     }
 
 };
