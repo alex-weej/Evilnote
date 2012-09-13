@@ -22,6 +22,8 @@ public slots:
 
     void deleteNode();
 
+    void setNodeAsOutput();
+
 protected:
 
     Node* m_node;

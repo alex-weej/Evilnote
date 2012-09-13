@@ -7,6 +7,7 @@ namespace En
 {
 
 class Node;
+class NodeGroup;
 
 class Host : public QObject
 {
@@ -19,7 +20,7 @@ class Host : public QObject
     QAudioOutput* m_audioOutput;
     QTimer* m_timer;
     unsigned long m_globalSampleIndex;
-    Node* m_outputNode;
+    NodeGroup* m_rootGroup;
     unsigned m_blockSizeSamples;
 
     // stuff for profiling utilisation
@@ -30,7 +31,7 @@ class Host : public QObject
 
 public:
 
-    Host(Node* outputNode);
+    Host(NodeGroup* rootGroup);
 
     virtual ~Host();
 

@@ -10,6 +10,7 @@ namespace En
 
 NodeGraphicsItem::NodeGraphicsItem(Node* node)
     : m_node(node)
+    , m_isOutputNode(false)
 {
     setFlag(ItemIsMovable);
     setFlag(ItemSendsGeometryChanges);
@@ -29,25 +30,35 @@ void NodeGraphicsItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* 
 {
     Q_UNUSED(option);
 
-    QBrush brush;
+    QRectF rect = nodeRect();
+    qreal radius = 10.;
+
+    QPen pen(painter->pen());
+    pen.setWidthF(2.0);
+
     if (isSelected()) {
-        brush = widget->palette().highlight();
+        QBrush selectedBrush = widget->palette().highlight();
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(selectedBrush);
+        qreal selectedRadius = radius + s_selectedPadding;
+        painter->drawRoundedRect(boundingRect(), selectedRadius, selectedRadius);
+    }
+
+    QBrush brush;
+    if (isOutputNode()) {
+        brush = QBrush(Qt::yellow);
     } else {
         //brush = QBrush(QColor(240, 240, 240));
         brush = widget->palette().button();
     }
     painter->setBrush(brush);
     // FIXME: use a standard brush somehow? or just use a palette
-    qreal radius = 10.;
-
-    QPen pen(painter->pen());
-    pen.setWidthF(2.0);
     painter->setPen(pen);
 
-    QRectF rect = boundingRect();
     qreal halfPenWidth = painter->pen().widthF() / 2.;
     rect.adjust(halfPenWidth, halfPenWidth, -halfPenWidth, -halfPenWidth);
     painter->drawRoundedRect(rect, radius, radius);
+
 }
 
 void NodeGraphicsItem::addConnectionArrow(NodeConnectionArrow* arrow)
@@ -151,6 +162,7 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event)
     }
 
     menu.addAction("Delete", helper, SLOT(deleteNode()));
+    menu.addAction("Set As Output", helper, SLOT(setNodeAsOutput()));
 
     menu.exec(event->screenPos());
 
@@ -158,13 +170,12 @@ void NodeGraphicsItem::contextMenuEvent(QGraphicsSceneContextMenuEvent* event)
 
 }
 
-void NodeGraphicsItem::updateConnectionArrows() const {
+void NodeGraphicsItem::updateConnectionArrows() const
+{
     Q_FOREACH (NodeConnectionArrow* arrow, m_connectionArrows) {
         arrow->updatePositions();
     }
 }
-
-
 
 void NodeGraphEditor::launchNodeCreationDialog()
 {
@@ -180,5 +191,39 @@ void NodeGraphEditor::launchNodeCreationDialog()
     }
 }
 
+void NodeGraphEditor::outputNodeChanged()
+{
+    Node* newOutputNode = m_nodeGroup->outputNode();
+    if (newOutputNode == m_currentOutputNode) {
+        return;
+    }
+    if (m_currentOutputNode) {
+        m_nodeItemMap[m_currentOutputNode]->setIsOutputNode(false);
+    }
+    m_currentOutputNode = newOutputNode;
+    if (m_currentOutputNode) {
+        m_nodeItemMap[m_currentOutputNode]->setIsOutputNode(true);
+    }
+}
+
+void NodeGraphEditor::deleteSelectedNodes()
+{
+    Q_FOREACH (Node* node, selectedNodes()) {
+        m_nodeGroup->deleteNode(node);
+    }
+}
+
+void NodeGraphEditor::setSelectedNodeAsOutput()
+{
+    // only set selected as output if there is a single node selected!
+    Node* selectedNode = 0;
+    Q_FOREACH (Node* node, selectedNodes()) {
+        if (selectedNode) {
+            return;
+        }
+        selectedNode = node;
+    }
+    m_nodeGroup->setOutputNode(selectedNode);
+}
 
 }

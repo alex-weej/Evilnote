@@ -12,9 +12,28 @@ class NodeGroup : public QObject
     // maybe change this to a QSet? can it be ordered?
     QVector<Node*> m_nodes;
 
+    // Probably move this to some kind of 'project' object
+    QPointer<Node> m_outputNode;
+
 public:
 
+    NodeGroup();
+
     virtual ~NodeGroup();
+
+    Node* outputNode() const
+    {
+        return m_outputNode;
+    }
+
+    void setOutputNode(Node* node)
+    {
+        if (!m_nodes.contains(node)) {
+            return;
+        }
+        m_outputNode = node;
+        emit outputNodeChanged(node);
+    }
 
     void addNode(Node* node);
 
@@ -53,6 +72,7 @@ signals:
     void nodeRemoved(Node* node);
     void nodePreDeleted(Node* node); // should probably move this to something more core? don't want to have to monitor every group for this
     void nodeInputsChanged(Node* node);
+    void outputNodeChanged(Node* node);
 
 };
 

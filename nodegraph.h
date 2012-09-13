@@ -43,6 +43,8 @@ class NodeGraphicsItem : public QGraphicsItem
 
     Node* m_node; // not owned!
     QSet<NodeConnectionArrow*> m_connectionArrows;
+    bool m_isOutputNode;
+    static const qreal s_selectedPadding = 5.;
 
 public:
 
@@ -53,9 +55,22 @@ public:
         return m_node;
     }
 
-    QRectF boundingRect() const
+    QRectF nodeRect() const
     {
         return QRectF(QPointF(-100, -20), QSizeF(200, 40));
+    }
+
+    QRectF selectedNodeRect() const
+    {
+        const qreal p = s_selectedPadding;
+        QRectF r = nodeRect();
+        r.adjust(-p, -p, p, p);
+        return r;
+    }
+
+    QRectF boundingRect() const
+    {
+        return selectedNodeRect();
     }
 
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget);
@@ -63,6 +78,17 @@ public:
     void addConnectionArrow(NodeConnectionArrow* arrow);
 
     void removeConnectionArrow(NodeConnectionArrow* arrow);
+
+    bool isOutputNode() const
+    {
+        return m_isOutputNode;
+    }
+
+    void setIsOutputNode(bool value)
+    {
+        m_isOutputNode = value;
+        update();
+    }
 
 protected:
 
@@ -161,6 +187,7 @@ class NodeGraphEditor: public QGraphicsView {
     QGraphicsItem* m_rootItem;
     QMap<Node*, NodeGraphicsItem*> m_nodeItemMap;
     QMap<Node*, QSet<NodeConnectionArrow*> > m_nodeInputArrows;
+    QPointer<Node> m_currentOutputNode;
 
 public:
 
@@ -229,10 +256,13 @@ public:
         connect(m_nodeGroup, SIGNAL(nodeAdded(Node*)), SLOT(nodeAdded(Node*)));
         connect(m_nodeGroup, SIGNAL(nodePreRemoved(Node*)), SLOT(nodePreRemoved(Node*)));
         connect(m_nodeGroup, SIGNAL(nodeInputsChanged(Node*)), SLOT(nodeInputsChanged(Node*)));
+        outputNodeChanged();
+        connect(m_nodeGroup, SIGNAL(outputNodeChanged(Node*)), SLOT(outputNodeChanged()));
 
         QShortcut* shortcut = 0;
         shortcut = new QShortcut(Qt::Key_Tab, this, SLOT(launchNodeCreationDialog()));
-        shortcut = new QShortcut(Qt::Key_Delete, this, SLOT(deleteSelected()));
+        shortcut = new QShortcut(Qt::Key_Delete, this, SLOT(deleteSelectedNodes()));
+        shortcut = new QShortcut(Qt::Key_O, this, SLOT(setSelectedNodeAsOutput()));
 
     }
 
@@ -296,16 +326,25 @@ protected slots:
 
     }
 
-    void deleteSelected()
+    void outputNodeChanged();
+
+    QList<Node*> selectedNodes() const
     {
+        QList<Node*> ret;
+
         Q_FOREACH (QGraphicsItem* item, scene()->selectedItems()) {
             NodeGraphicsItem* nodeItem = qgraphicsitem_cast<NodeGraphicsItem*>(item);
             if (nodeItem) {
-                Node* node = nodeItem->node();
-                m_nodeGroup->deleteNode(node);
+                ret << nodeItem->node();
             }
         }
+
+        return ret;
     }
+
+    void deleteSelectedNodes();
+
+    void setSelectedNodeAsOutput();
 
     void launchNodeCreationDialog();
 

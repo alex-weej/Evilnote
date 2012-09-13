@@ -12,12 +12,12 @@
 namespace En
 {
 
-Host::Host(Node* outputNode)
+Host::Host(NodeGroup* rootGroup)
     : m_ioDevice(0)
     , m_audioOutput(0)
     , m_timer(0)
     , m_globalSampleIndex(0)
-    , m_outputNode(outputNode)
+    , m_rootGroup(rootGroup)
     , m_lastProfiledTime(0)
     , m_busyAccumulatedTime(0)
 {
@@ -43,7 +43,7 @@ void Host::init()
     const int bufferSizeSamples = 512;
     m_audioOutput->setBufferSize(bufferSizeSamples * m_format.channels() * m_format.sampleSize() / 8);
 
-    connect(m_audioOutput, SIGNAL(notify()), SLOT(notified()));
+    //connect(m_audioOutput, SIGNAL(notify()), SLOT(notified()));
     connect(m_audioOutput, SIGNAL(stateChanged(QAudio::State)), SLOT(stateChanged(QAudio::State)));
 
     m_ioDevice = m_audioOutput->start();
@@ -132,7 +132,7 @@ void Host::writeData()
             //qDebug() << "ppq pos" << s_vstTimeInfo.ppqPos;
 
 
-            Node* outputNode = m_outputNode;
+            Node* outputNode = m_rootGroup->outputNode();
 
             //qDebug() << "checkpoint before dep calc" << elTimer.restart();
 
@@ -176,7 +176,7 @@ void Host::writeData()
 
             } dependencyVisitor;
 
-            Q_FOREACH (Node* node, outputNode->nodeGroup()->childNodes()) {
+            Q_FOREACH (Node* node, m_rootGroup->childNodes()) {
                 dependencyVisitor.visitRecurse(node);
             }
 
@@ -253,16 +253,26 @@ void Host::writeData()
 
             qint16* ptr = (qint16*)m_buffer.data();
 
-            for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
-                for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                    float clamped = std::min(std::max(outputNode->outputChannelBufferConst(channel)[sampleIndex], -1.f), 1.f);
-                    *ptr++ = qint16(clamped * 32767);
+            if (!outputNode) {
+
+                m_buffer.fill(0);
+
+            } else {
+
+                for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
+                    for (int channel = 0; channel < m_format.channelCount(); ++channel) {
+                        float clamped = std::min(std::max(outputNode->outputChannelBufferConst(channel)[sampleIndex], -1.f), 1.f);
+                        *ptr++ = qint16(clamped * 32767);
+                    }
                 }
+
             }
 
 
             //qDebug("writing buffer");
             qint64 written = m_ioDevice->write(m_buffer.data(), m_buffer.size());
+
+            Q_UNUSED(written);
 
 
             //qDebug() << "checkpoint finish" << elTimer.restart();

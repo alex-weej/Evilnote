@@ -4,6 +4,11 @@
 namespace En
 {
 
+NodeGroup::NodeGroup()
+{
+
+}
+
 NodeGroup::~NodeGroup()
 {
     Q_FOREACH (Node* node, m_nodes) {

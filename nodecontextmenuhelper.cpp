@@ -10,6 +10,11 @@ void NodeContextMenuHelper::deleteNode()
     m_node->nodeGroup()->deleteNode(m_node);
 }
 
+void NodeContextMenuHelper::setNodeAsOutput()
+{
+    m_node->nodeGroup()->setOutputNode(m_node);
+}
+
 void VstNodeContextMenuHelper::setInput(QObject *inputNodeObject)
 {
     //qDebug() << "setting input";

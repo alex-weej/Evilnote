@@ -19,8 +19,9 @@ int main(int argc, char*argv[])
     En::MixerNode* mixerNode = new En::MixerNode();
     mixerNode->setPosition(QPointF(0, 0));
     rootGroup->addNode(mixerNode);
+    rootGroup->setOutputNode(mixerNode);
 
-    En::HostThread* hostThread = new En::HostThread(mixerNode);
+    En::HostThread* hostThread = new En::HostThread(rootGroup);
     hostThread->start(QThread::TimeCriticalPriority);
 
     En::MainWindow main(rootGroup);
