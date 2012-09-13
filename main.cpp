@@ -1,9 +1,9 @@
-#include <QtGui>
-#include <QtCore>
-#include <QtMultimedia>
-#include <QAudioOutput>
+#include "core.h"
+#include "nodegroup.h"
+#include "mixernode.h"
+#include "hostthread.h"
 #include "mainwindow.h"
-
+#include <QtGui>
 
 int main(int argc, char*argv[])
 {

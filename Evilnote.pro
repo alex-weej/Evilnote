@@ -13,14 +13,39 @@ INCLUDEPATH += /Users/alex/Downloads/vstsdk2.4
 
 LIBS += -framework CoreFoundation -framework Carbon -framework Cocoa
 
-SOURCES += main.cpp\
-        mainwindow.cpp
+SOURCES += main.cpp \
+    en.cpp \
+    nodecontextmenuhelper.cpp \
+    node.cpp \
+    host.cpp \
+    nodegraph.cpp \
+    mainwindow.cpp \
+    nodecreationdialog.cpp \
+    vstnode.cpp \
+    core.cpp \
+    nodegroup.cpp \
+    nodewindow.cpp
 
-OBJECTIVE_SOURCES += cocoastuff.mm
+OBJECTIVE_SOURCES += vsteditorwidget.mm
 
-HEADERS  += mainwindow.h
+HEADERS  += \
+    vstnode.h \
+    en.h \
+    node.h \
+    vstmodule.h \
+    __headertemplate.h \
+    core.h \
+    nodegroup.h \
+    mixernode.h \
+    nodecontextmenuhelper.h \
+    vstinfo.h \
+    vsteditorwidget.h \
+    host.h \
+    hostthread.h \
+    nodewindow.h \
+    nodegraph.h \
+    mainwindow.h \
+    nodecreationdialog.h
 
-FORMS    += mainwindow.ui
-
-#OTHER_FILES += \
-#    carbonshit.mm
+FORMS    += \
+    nodewindow.ui

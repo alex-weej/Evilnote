@@ -1,13 +1,16 @@
+#include "vsteditorwidget.h"
+
+#include <CoreServices/CoreServices.h>
 #include <Cocoa/Cocoa.h>
-#include "mainwindow.h"
+#include "vstnode.h"
 
 namespace En
 {
 
-VstEditorWidget::VstEditorWidget(VstNode* vstNode, QWidget* parent/*=0*/)
-    : QMacCocoaViewContainer(0, parent),
-      m_vstNode(vstNode),
-      m_view(0)
+VstEditorWidget::VstEditorWidget(VstNode* vstNode, QWidget* parent)
+    : QMacCocoaViewContainer(0, parent)
+    , m_vstNode(vstNode)
+    , m_view(0)
 {
     // is this pool necessary? answers on a postcard...
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
@@ -17,15 +20,16 @@ VstEditorWidget::VstEditorWidget(VstNode* vstNode, QWidget* parent/*=0*/)
     [pool release];
 }
 
-VstEditorWidget::~VstEditorWidget() {
+VstEditorWidget::~VstEditorWidget()
+{
     if (m_view) {
         [m_view release];
     }
 }
 
 
-void VstEditorWidget::showEvent(QShowEvent* event) {
-
+void VstEditorWidget::showEvent(QShowEvent* event)
+{
     AEffect* vstInstance = m_vstNode->vstInstance();
 
     NSView* superview = (NSView*)cocoaView();
@@ -50,6 +54,7 @@ void VstEditorWidget::showEvent(QShowEvent* event) {
 
     m_view = [[subviews objectAtIndex:0] retain];
     [[NSNotificationCenter defaultCenter] addObserverForName:@"NSViewFrameDidChangeNotification" object:m_view queue:nil usingBlock:^(NSNotification* notification) {
+        Q_UNUSED(notification);
         //qDebug() << "adjust editor size to" << sizeHint();
         // need to adjust the superview frame to be the same as the view frame
         [superview setFrame:[m_view frame]];
@@ -100,22 +105,6 @@ QSize VstEditorWidget::sizeHint() const {
     ret = QSize(frame.size.width, frame.size.height);
 
     return ret;
-
-}
-
-
-void NodeCreationDialog::initCocoa()
-{
-    // The intention here is to create a HUD window on Mac, but this doesn't work for some reason
-    return;
-
-    NSView* view = (NSView*)winId();
-    NSWindow* window = [view window];
-
-    if ([window isKindOfClass:[NSPanel class]]) {
-        NSPanel* panel = window;
-        [panel setStyleMask:NSHUDWindowMask];
-    }
 
 }
 
