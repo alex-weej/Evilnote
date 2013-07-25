@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QtGui>
+#include <QtWidgets>
 
 namespace En
 {

@@ -8,7 +8,8 @@ namespace En
 {
 
 NodeCreationDialog::NodeCreationDialog(NodeGroup* nodeGroup, QPointF pos, QWidget* parent)
-    : QDialog(parent, Qt::Popup)
+    : QDialog(parent, Qt::Tool)
+
     , m_nodeGroup(nodeGroup)
     , m_createdNode(0)
 {
@@ -21,7 +22,7 @@ NodeCreationDialog::NodeCreationDialog(NodeGroup* nodeGroup, QPointF pos, QWidge
     layout->addWidget(creationWidget);
     connect(creationWidget, SIGNAL(nodeCreated(Node*)), SLOT(nodeCreated(Node*)));
 
-    creationWidget->setFocus();
+    //creationWidget->setFocus();
 }
 
 void NodeCreationDialog::nodeCreated(Node *newNode)

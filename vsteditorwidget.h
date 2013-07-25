@@ -2,6 +2,12 @@
 
 #include <QMacCocoaViewContainer>
 
+#ifdef __OBJC__
+//@class NSView;
+#else
+//class NSView;
+#endif
+
 namespace En
 {
 
@@ -12,7 +18,7 @@ class VstEditorWidget : public QMacCocoaViewContainer
     Q_OBJECT
 
     VstNode* m_vstNode;
-    class NSView* m_view;
+    NSView* m_view;
 
 public:
 

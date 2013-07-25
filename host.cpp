@@ -31,8 +31,8 @@ Host::~Host()
 
 void Host::init()
 {
-    m_format.setFrequency(44100);
-    m_format.setChannels(2);
+    m_format.setSampleRate(44100);
+    m_format.setChannelCount(2);
     m_format.setSampleSize(16);
     m_format.setCodec("audio/pcm");
     m_format.setByteOrder(QAudioFormat::LittleEndian);
@@ -41,7 +41,7 @@ void Host::init()
     m_audioOutput = new QAudioOutput(m_format, this);
 
     const int bufferSizeSamples = 512;
-    m_audioOutput->setBufferSize(bufferSizeSamples * m_format.channels() * m_format.sampleSize() / 8);
+    m_audioOutput->setBufferSize(bufferSizeSamples * m_format.channelCount() * m_format.sampleSize() / 8);
 
     //connect(m_audioOutput, SIGNAL(notify()), SLOT(notified()));
     connect(m_audioOutput, SIGNAL(stateChanged(QAudio::State)), SLOT(stateChanged(QAudio::State)));

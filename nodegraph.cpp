@@ -181,9 +181,16 @@ void NodeGraphEditor::launchNodeCreationDialog()
 {
     QPoint cursorPos = QCursor::pos();
     QPointF graphPos = mapToScene(mapFromGlobal(cursorPos));
+
+
+//    QInputDialog fd;
+//    fd.exec();
+    //return;
+
+
     NodeCreationDialog d(m_nodeGroup, graphPos, this);
-    d.adjustSize();
-    d.move(cursorPos - d.rect().center());
+    //d.adjustSize();
+    //d.move(cursorPos - d.rect().center());
     d.exec();
     if (d.createdNode()) {
         scene()->clearSelection();

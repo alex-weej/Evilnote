@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui multimedia opengl
+QT       += core widgets multimedia opengl macextras
 
 TARGET = Evilnote
 TEMPLATE = app

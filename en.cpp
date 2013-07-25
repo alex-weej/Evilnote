@@ -1,8 +1,8 @@
 #include "en.h"
 
-#include "ui_mainwindow.h"
+//#include "ui_mainwindow.h"
 
-#include <QtGui>
+#include <QtWidgets>
 
 namespace En {
 

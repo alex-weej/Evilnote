@@ -14,7 +14,7 @@ VstEditorWidget::VstEditorWidget(VstNode* vstNode, QWidget* parent)
 {
     // is this pool necessary? answers on a postcard...
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    NSView* superview = [[NSView alloc] init];
+    id superview = [[::NSView alloc] init];
     setCocoaView(superview);
     [superview release];
     [pool release];
