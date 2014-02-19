@@ -38,7 +38,21 @@ void Host::init()
     m_format.setByteOrder(QAudioFormat::LittleEndian);
     m_format.setSampleType(QAudioFormat::SignedInt);
 
-    m_audioOutput = new QAudioOutput(m_format, this);
+    // TODO: Use QSettings for this
+    auto selectedDeviceName = "MOTU MicroBook II";
+
+    QAudioDeviceInfo selectedDeviceInfo = QAudioDeviceInfo::defaultInputDevice();
+
+    foreach (const auto &deviceInfo, QAudioDeviceInfo::availableDevices(QAudio::AudioOutput)) {
+        if (deviceInfo.deviceName() == selectedDeviceName) {
+            selectedDeviceInfo = deviceInfo;
+        }
+    }
+
+    qDebug() << "Device name: " << selectedDeviceInfo.deviceName();
+    qDebug() << "Supported channel count: " << selectedDeviceInfo.supportedChannelCounts();
+
+    m_audioOutput = new QAudioOutput(selectedDeviceInfo, m_format, this);
 
     const int bufferSizeSamples = 512;
     m_audioOutput->setBufferSize(bufferSizeSamples * m_format.channelCount() * m_format.sampleSize() / 8);
