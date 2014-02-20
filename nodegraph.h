@@ -220,12 +220,12 @@ public:
         scene()->addItem(m_rootItem);
 
         // this code /will/ move at some point
-        for (unsigned i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
+        for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
             nodeAdded(m_nodeGroup->childNode(i));
         }
 
         // dodgy, but it'll do for now
-        for (unsigned i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
+        for (int i = 0; i < m_nodeGroup->numChildNodes(); ++i) {
             nodeInputsChanged(m_nodeGroup->childNode(i));
 #if 0
             Node* node = m_nodeGroup->childNode(i);

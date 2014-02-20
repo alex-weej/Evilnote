@@ -3,6 +3,8 @@
 #include <QtCore>
 #include <QtMultimedia>
 
+#include "mididevice.h"
+
 namespace En
 {
 
@@ -29,6 +31,8 @@ class Host : public QObject
 
     QVector<float> m_nullInputBuffer;
 
+    MidiDevice *m_globalMidiDevice;
+
 public:
 
     Host(NodeGroup* rootGroup);
@@ -41,6 +45,10 @@ public:
 
     const float* nullInputBuffer() const {
         return m_nullInputBuffer.constData();
+    }
+
+    MidiDevice *globalMidiDevice() const {
+        return m_globalMidiDevice;
     }
 
 public slots:

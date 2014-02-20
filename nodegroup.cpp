@@ -4,7 +4,8 @@
 namespace En
 {
 
-NodeGroup::NodeGroup()
+NodeGroup::NodeGroup() :
+    m_host(0)
 {
 
 }

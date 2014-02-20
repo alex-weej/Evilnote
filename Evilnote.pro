@@ -11,7 +11,7 @@ TEMPLATE = app
 
 INCLUDEPATH += /Users/alex/Downloads/vstsdk2.4
 
-LIBS += -framework CoreFoundation -framework Carbon -framework Cocoa
+LIBS += -framework CoreFoundation -framework Carbon -framework Cocoa -framework CoreMIDI
 
 SOURCES += main.cpp \
     en.cpp \
@@ -26,7 +26,8 @@ SOURCES += main.cpp \
     nodegroup.cpp \
     nodewindow.cpp
 
-OBJECTIVE_SOURCES += vsteditorwidget.mm
+OBJECTIVE_SOURCES += vsteditorwidget.mm \
+    mididevice.mm
 
 HEADERS  += \
     vstnode.h \
@@ -45,7 +46,8 @@ HEADERS  += \
     nodewindow.h \
     nodegraph.h \
     mainwindow.h \
-    nodecreationdialog.h
+    nodecreationdialog.h \
+    mididevice.h
 
 FORMS    += \
     nodewindow.ui

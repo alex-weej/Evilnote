@@ -21,6 +21,7 @@ Host::Host(NodeGroup* rootGroup)
     , m_lastProfiledTime(0)
     , m_busyAccumulatedTime(0)
 {
+    rootGroup->setHost(this);
     init();
 }
 
@@ -85,6 +86,7 @@ void Host::init()
     connect(m_timer, SIGNAL(timeout()), this, SLOT(writeData()));
     m_timer->start();
 
+    m_globalMidiDevice = new En::MidiDevice(this);
 }
 
 void Host::stop()

@@ -32,18 +32,9 @@ NodeWindow::~NodeWindow()
 }
 
 static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
-    // temp testing stuff to force sending multiple notes at the exact same time.
-    // change i to a number <= 4 to make this send chords.
-    for (int i = 0; i < 1; ++i) {
-        if (i == 1) noteValue += 4;
-        else if (i == 2) noteValue += 3;
-        else if (i == 3) noteValue += 5;
-
-        VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
-        // heap that shit.
-        VstMidiEvent* pEvent = new VstMidiEvent(event);
-        vstNode->queueEvent((VstEvent*)pEvent);
-    }
+    VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
+    VstMidiEvent* pEvent = new VstMidiEvent(event);
+    vstNode->queueEvent((VstEvent*)pEvent);
 }
 
 void NodeWindow::on_testNoteButton_pressed()

@@ -3,6 +3,7 @@
 #include "node.h"
 #include "nodewindow.h"
 #include "vstmodule.h"
+#include "mididevice.h"
 #include "en.h"
 #include <QtCore>
 
@@ -20,6 +21,7 @@ class VstNode : public Node
     QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
     Node* m_input;
+    MidiDevice *m_midiInput;
     QString m_productName;
     NodeWindow* m_editorWindow; // move this to Node eventually
 
@@ -33,14 +35,14 @@ public:
 
         Factory(const QString& vstName) : m_vstName(vstName) {}
 
-        virtual Node* create();
+        virtual Node* create(Host *);
     };
 
-    VstNode(VstModule* vstModule)
-        : m_vstInstance(vstModule->createVstInstance())
-        , m_eventQueueWriteIndex(0)
-        , m_input(0)
-        , m_editorWindow(0)
+    VstNode(Host* host, VstModule* vstModule) :
+        m_vstInstance(vstModule->createVstInstance()),
+        m_eventQueueWriteIndex(0),
+        m_input(0),
+        m_editorWindow(0)
     {
         //this->setParent(vstModule); // hm, this causes a crash on the VstModule QObject children cleanup.
 
@@ -146,6 +148,7 @@ public:
         qDebug() << "mainsChanged";
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
 
+        setMidiInput(host->globalMidiDevice());
     }
 
     AEffect* vstInstance() const {
@@ -159,7 +162,7 @@ public:
     }
 
     virtual QString displayLabel() const {
-        return tr("VST %1").arg(productName());
+        return tr("%1 (VST)").arg(productName());
     }
 
     virtual void accept(Visitor& visitor) {
@@ -172,12 +175,20 @@ public:
         m_eventQueue[m_eventQueueWriteIndex].push_back(event);
     }
 
+    Q_SLOT void postMidiEvent(const QByteArray& midiEvent);
+
     void processAudio();
 
     void setInput(Node* node);
 
     Node* input() const {
         return m_input;
+    }
+
+    void setMidiInput(MidiDevice* node);
+
+    MidiDevice *midiInput() const {
+        return m_midiInput;
     }
 
     QList<Node*> inputs() const

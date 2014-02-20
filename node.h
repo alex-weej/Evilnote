@@ -1,6 +1,7 @@
 #pragma once
 
 #include "en.h"
+#include "host.h"
 
 namespace En
 {
@@ -18,7 +19,8 @@ public:
     class Factory
     {
     public:
-        virtual Node* create() = 0;
+        virtual Node* create(Host*) = 0;
+        virtual ~Factory() {}
     };
 
 private:

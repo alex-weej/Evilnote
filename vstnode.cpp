@@ -16,9 +16,18 @@ VstNode::~VstNode()
     m_vstInstance = 0;
 }
 
-Node* VstNode::Factory::create()
+void VstNode::postMidiEvent(const QByteArray &midiEvent)
 {
-    return new VstNode(Core::instance()->vstModule(m_vstName));
+    VstMidiEvent event = {kVstMidiType, sizeof(VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0, 0, 0, 0}, 0, 0, 0, 0};
+    qCopy(midiEvent.begin(), midiEvent.end(), &event.midiData[0]);
+    // Not sure why the copy is necessary... terser way of doing this right?
+    VstMidiEvent* pEvent = new VstMidiEvent(event);
+    queueEvent(reinterpret_cast<VstEvent*>(pEvent));
+}
+
+Node* VstNode::Factory::create(Host* host)
+{
+    return new VstNode(host, Core::instance()->vstModule(m_vstName));
 }
 
 void VstNode::setInput(Node* node)
@@ -26,6 +35,12 @@ void VstNode::setInput(Node* node)
     //qDebug() << "setting input to" << node;
     m_input = node;
     nodeGroup()->emitNodeInputsChanged(this);
+}
+
+void VstNode::setMidiInput(MidiDevice *midiInput)
+{
+    connect(midiInput, SIGNAL(eventPosted(QByteArray)) , this, SLOT(postMidiEvent(QByteArray)));
+    m_midiInput = midiInput;
 }
 
 void VstNode::removeInput(Node* node)

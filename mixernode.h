@@ -19,7 +19,7 @@ public:
 
     public:
 
-        virtual Node* create()
+        virtual Node* create(Host*)
         {
             return new MixerNode;
         }

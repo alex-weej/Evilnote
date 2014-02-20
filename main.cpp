@@ -5,10 +5,12 @@
 #include "mainwindow.h"
 #include <QtGui>
 
+void testMidi();
+
 int main(int argc, char* argv[])
 {
-    QApplication a(argc, argv);
-    a.setApplicationName("Evilnote");
+    QApplication app(argc, argv);
+    app.setApplicationName("Evilnote");
 
     En::Core core;
 
@@ -28,7 +30,7 @@ int main(int argc, char* argv[])
     hostThread->connect(hostThread, SIGNAL(utilisation(float)), &main, SLOT(utilisation(float)));
     main.show();
 
-    a.exec();
+    app.exec();
 
     hostThread->quit();
     //qDebug() << "Waiting for host thread to finish up...";

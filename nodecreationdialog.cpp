@@ -79,7 +79,7 @@ void NodeCreationWidget::createNode()
         return;
     }
 
-    Node* node = it.value()->create();
+    Node* node = it.value()->create(m_nodeGroup->host());
     node->setPosition(m_pos);
     m_nodeGroup->addNode(node);
 

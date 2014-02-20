@@ -15,11 +15,21 @@ class NodeGroup : public QObject
     // Probably move this to some kind of 'project' object
     QPointer<Node> m_outputNode;
 
+    Host* m_host;
+
 public:
 
     NodeGroup();
 
     virtual ~NodeGroup();
+
+    void setHost(Host* host) {
+        m_host = host;
+    }
+
+    Host* host() const {
+        return m_host;
+    }
 
     Node* outputNode() const
     {
@@ -41,7 +51,7 @@ public:
 
     void deleteNode(Node* node);
 
-    unsigned numChildNodes() const
+    int numChildNodes() const
     {
         return m_nodes.size();
     }
