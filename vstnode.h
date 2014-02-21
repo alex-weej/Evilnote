@@ -37,7 +37,7 @@ public:
         virtual Node* create(Host*);
     };
 
-    VstNode(Host* host, VstModule* vstModule) :
+    VstNode(Host* /*host*/, VstModule* vstModule) :
         m_vstInstance(vstModule->createVstInstance()),
         m_eventQueueWriteIndex(0),
         m_input(0),

@@ -44,7 +44,7 @@ class NodeGraphicsItem : public QGraphicsItem
     Node* m_node; // not owned!
     QSet<NodeConnectionArrow*> m_connectionArrows;
     bool m_isOutputNode;
-    static const qreal s_selectedPadding = 5.;
+    static constexpr qreal s_selectedPadding = 5.;
 
 public:
 

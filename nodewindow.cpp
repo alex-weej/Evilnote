@@ -32,9 +32,9 @@ NodeWindow::~NodeWindow()
 }
 
 static void sendNote(En::VstNode* vstNode, unsigned char noteValue, unsigned char velocity) {
-    VstMidiEvent event = {kVstMidiType, sizeof (VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0x90, noteValue, velocity, 0}, 0, 0, 0, 0};
+    VstMidiEvent event = {kVstMidiType, sizeof(VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {static_cast<char>(0x90), static_cast<char>(noteValue), static_cast<char>(velocity), 0}, 0, 0, 0, 0};
     VstMidiEvent* pEvent = new VstMidiEvent(event);
-    vstNode->queueEvent((VstEvent*)pEvent);
+    vstNode->queueEvent(reinterpret_cast<VstEvent*>(pEvent));
 }
 
 void NodeWindow::on_testNoteButton_pressed()

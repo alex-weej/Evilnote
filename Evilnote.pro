@@ -4,6 +4,8 @@
 #
 #-------------------------------------------------
 
+CONFIG += c++11
+
 QT       += core widgets multimedia opengl macextras
 
 TARGET = Evilnote
