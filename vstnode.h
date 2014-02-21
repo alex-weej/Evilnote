@@ -3,7 +3,7 @@
 #include "node.h"
 #include "nodewindow.h"
 #include "vstmodule.h"
-#include "mididevice.h"
+#include "mididevice.hh"
 #include "en.h"
 #include <QtCore>
 
@@ -21,13 +21,12 @@ class VstNode : public Node
     QVector<VstEvent*> m_eventQueue[2];// 'double buffered' to mitigate lock contention.
     int m_eventQueueWriteIndex; // 0 or 1 depending on which of m_eventQueue is for writing.
     Node* m_input;
-    MidiDevice *m_midiInput;
     QString m_productName;
     NodeWindow* m_editorWindow; // move this to Node eventually
 
 public:
 
-    class Factory: public Node::Factory
+    class Factory : public Node::Factory
     {
         QString m_vstName;
 
@@ -35,7 +34,7 @@ public:
 
         Factory(const QString& vstName) : m_vstName(vstName) {}
 
-        virtual Node* create(Host *);
+        virtual Node* create(Host*);
     };
 
     VstNode(Host* host, VstModule* vstModule) :
@@ -95,7 +94,7 @@ public:
         // the AEffect::numInputs / numOutputs fields are the final word on IO config. Make sure we're set up right,
         // even if the effGetOutputProperties opcode lied to us.
 
-        if (unsigned(m_vstInstance->numInputs) != numInputChannels() || unsigned(m_vstInstance->numOutputs) != numOutputChannels()) {
+        if (m_vstInstance->numInputs != numInputChannels() || m_vstInstance->numOutputs != numOutputChannels()) {
 
             if (numInputChannels() != 0 || numOutputChannels() != 0) {
                 qDebug() << "WARNING: plugins input/output properties don't match actual number of inputs/outputs!";
@@ -147,8 +146,6 @@ public:
 
         qDebug() << "mainsChanged";
         m_vstInstance->dispatcher (m_vstInstance, effMainsChanged, 0, 1, 0, 0);
-
-        setMidiInput(host->globalMidiDevice());
     }
 
     AEffect* vstInstance() const {
@@ -175,7 +172,7 @@ public:
         m_eventQueue[m_eventQueueWriteIndex].push_back(event);
     }
 
-    Q_SLOT void postMidiEvent(const QByteArray& midiEvent);
+    void queueMidiEvent(const QByteArray &midiEvent);
 
     void processAudio();
 
@@ -185,14 +182,7 @@ public:
         return m_input;
     }
 
-    void setMidiInput(MidiDevice* node);
-
-    MidiDevice *midiInput() const {
-        return m_midiInput;
-    }
-
-    QList<Node*> inputs() const
-    {
+    QList<Node*> inputs() const {
         QList<Node*> ret;
         ret << m_input;
         return ret;

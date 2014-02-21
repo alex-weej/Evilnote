@@ -16,7 +16,7 @@ VstNode::~VstNode()
     m_vstInstance = 0;
 }
 
-void VstNode::postMidiEvent(const QByteArray &midiEvent)
+void VstNode::queueMidiEvent(const QByteArray &midiEvent)
 {
     VstMidiEvent event = {kVstMidiType, sizeof(VstMidiEvent), 0, kVstMidiEventIsRealtime, 0, 0, {0, 0, 0, 0}, 0, 0, 0, 0};
     qCopy(midiEvent.begin(), midiEvent.end(), &event.midiData[0]);
@@ -35,12 +35,6 @@ void VstNode::setInput(Node* node)
     //qDebug() << "setting input to" << node;
     m_input = node;
     nodeGroup()->emitNodeInputsChanged(this);
-}
-
-void VstNode::setMidiInput(MidiDevice *midiInput)
-{
-    connect(midiInput, SIGNAL(eventPosted(QByteArray)) , this, SLOT(postMidiEvent(QByteArray)));
-    m_midiInput = midiInput;
 }
 
 void VstNode::removeInput(Node* node)
@@ -87,6 +81,12 @@ void VstNode::processAudio()
 
     for (int c = 0; c < numOutputChannels; ++c) {
         outputFloats[c] = outputChannelBuffer(c);
+    }
+
+    if (input()) {
+        foreach (const auto& event, input()->midiEvents()) {
+            queueMidiEvent(event);
+        }
     }
 
     // Take a reference to the event queue, and buffer swap

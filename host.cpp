@@ -161,34 +161,41 @@ void Host::writeData()
                 NodeRelationMap dependentMap;
 
                 void visitRecurse(Node* node) {
-                    //qDebug() << "VisitRecurse Node*" << node->displayLabel();
                     if (dependencyMap.contains(node)) {
                         return;
                     }
                     dependencyMap[node];
                     dependentMap[node];
-                    node->accept(*this);
-                }
-
-                void visit(VstNode* vstNode) {
-                    //qDebug() << "Visiting VstNode*" << vstNode->displayLabel();
-                    Node* input = vstNode->input();
-                    if (input) {
-                        dependencyMap[static_cast<Node*>(vstNode)] << input;
-                        dependentMap[input] << static_cast<Node*>(vstNode);
+                    foreach (const auto& input, node->inputs()) {
+                        if (!input) {
+                            continue;
+                        }
+                        dependencyMap[node] << input;
+                        dependentMap[input] << node;
                         visitRecurse(input);
                     }
+                    //node->accept(*this);
                 }
 
-                void visit(MixerNode* mixerNode) {
-                    //qDebug() << "Visiting MixerNode*" << mixerNode->displayLabel();
-                    for (unsigned i = 0; i < mixerNode->numInputs(); ++i) {
-                        Node* input = mixerNode->input(i);
-                        dependencyMap[static_cast<Node*>(mixerNode)] << input;
-                        dependentMap[input] << static_cast<Node*>(mixerNode);
-                        visitRecurse(input);
-                    }
-                }
+//                void visit(VstNode* vstNode) {
+//                    //qDebug() << "Visiting VstNode*" << vstNode->displayLabel();
+//                    Node* input = vstNode->input();
+//                    if (input) {
+//                        dependencyMap[static_cast<Node*>(vstNode)] << input;
+//                        dependentMap[input] << static_cast<Node*>(vstNode);
+//                        visitRecurse(input);
+//                    }
+//                }
+
+//                void visit(MixerNode* mixerNode) {
+//                    //qDebug() << "Visiting MixerNode*" << mixerNode->displayLabel();
+//                    for (unsigned i = 0; i < mixerNode->numInputs(); ++i) {
+//                        Node* input = mixerNode->input(i);
+//                        dependencyMap[static_cast<Node*>(mixerNode)] << input;
+//                        dependentMap[input] << static_cast<Node*>(mixerNode);
+//                        visitRecurse(input);
+//                    }
+//                }
 
             } dependencyVisitor;
 
@@ -250,6 +257,7 @@ void Host::writeData()
 
                 virtual void visit(Node* node)
                 {
+                    //qDebug() << "visit" << node;
                     node->processAudio();
 
                     Q_FOREACH (Node* dependentNode, dependencyVisitor.dependentMap[node]) {
@@ -275,9 +283,28 @@ void Host::writeData()
 
             } else {
 
+                // If channel count on node is 1, just use it for all channels
+                // Otherwise fill them up.
+
+                QList<const float*> channelBuffers;
+                if (outputNode->numOutputChannels() == 1) {
+                    for (int i = 0; i < m_format.channelCount(); ++i) {
+                        channelBuffers.push_back(outputNode->outputChannelBufferConst(0));
+                    }
+                } else {
+                    for (int i = 0; i < m_format.channelCount(); ++i) {
+                        if (i < outputNode->numOutputChannels()) {
+                            channelBuffers.push_back(outputNode->outputChannelBufferConst(i));
+                        } else {
+                            channelBuffers.push_back(Node::s_nullInputBuffer);
+                        }
+                    }
+                }
+
                 for (unsigned sampleIndex = 0; sampleIndex < m_blockSizeSamples; sampleIndex++) {
                     for (int channel = 0; channel < m_format.channelCount(); ++channel) {
-                        float clamped = std::min(std::max(outputNode->outputChannelBufferConst(channel)[sampleIndex], -1.f), 1.f);
+
+                        float clamped = std::min(std::max(channelBuffers[channel][sampleIndex], -1.f), 1.f);
                         *ptr++ = qint16(clamped * 32767);
                     }
                 }

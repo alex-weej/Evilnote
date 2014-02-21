@@ -9,6 +9,7 @@ namespace En
 class NodeGroup;
 class VstNode;
 class MixerNode;
+class MidiInputNode;
 
 class Node : public QObject
 {
@@ -55,10 +56,12 @@ public:
         return 512;
     }
 
+    // Turns out, probably didn't need this...
     struct Visitor {
         virtual void visit(Node* node) { Q_UNUSED(node); }
         virtual void visit(VstNode* node);
         virtual void visit(MixerNode* node);
+        virtual void visit(MidiInputNode* node);
     };
 
     static const float* s_nullInputBuffer;
@@ -88,11 +91,11 @@ public:
 
     virtual void accept(Visitor&) {}
 
-    unsigned numInputChannels() const {
+    int numInputChannels() const {
         return m_inputChannelData.count();
     }
 
-    unsigned numOutputChannels() const {
+    int numOutputChannels() const {
         return m_outputChannelData.count();
     }
 
@@ -100,8 +103,15 @@ public:
         return m_outputChannelData[channelIndex].buffer.data();
     }
 
-    const float* outputChannelBufferConst(int channelIndex) {
+    const float* outputChannelBufferConst(int channelIndex) const {
+        if (channelIndex >= numOutputChannels()) {
+            return s_nullInputBuffer;
+        }
         return m_outputChannelData[channelIndex].buffer.constData();
+    }
+
+    virtual QList<QByteArray> midiEvents() const {
+        return QList<QByteArray>();
     }
 
     virtual QString displayLabel() const = 0;
@@ -130,4 +140,4 @@ public:
 
 };
 
-} // namespac En
+} // namespace En

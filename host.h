@@ -3,7 +3,7 @@
 #include <QtCore>
 #include <QtMultimedia>
 
-#include "mididevice.h"
+#include "mididevice.hh"
 
 namespace En
 {

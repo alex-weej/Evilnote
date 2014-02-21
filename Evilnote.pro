@@ -24,7 +24,8 @@ SOURCES += main.cpp \
     vstnode.cpp \
     core.cpp \
     nodegroup.cpp \
-    nodewindow.cpp
+    nodewindow.cpp \
+    midiinputnode.cpp
 
 OBJECTIVE_SOURCES += vsteditorwidget.mm \
     mididevice.mm
@@ -47,7 +48,8 @@ HEADERS  += \
     nodegraph.h \
     mainwindow.h \
     nodecreationdialog.h \
-    mididevice.h
+    midiinputnode.h \
+    mididevice.hh
 
 FORMS    += \
     nodewindow.ui

@@ -1,4 +1,4 @@
-#include <mididevice.h>
+#include <mididevice.hh>
 
 #import <CoreMIDI/CoreMIDI.h>
 #import <Foundation/Foundation.h>
@@ -7,8 +7,8 @@
 
 static void midiInputCallback(const MIDIPacketList *list,
                               void *procRef,
-                              void *srcRef) {
-
+                              void *srcRef)
+{
     auto device = reinterpret_cast<En::MidiDevice::MidiDevice*>(procRef);
 
     for (UInt32 i = 0; i < list->numPackets; i++) {
@@ -32,14 +32,12 @@ static void midiInputCallback(const MIDIPacketList *list,
 
 En::MidiDevice::MidiDevice(QObject *parent) : QObject(parent)
 {
-    MIDIClientRef   midiClient;
-    MIDIPortRef     inputPort;
     OSStatus        status;
 
-    status = MIDIClientCreate(CFSTR("MIDI client"), NULL, NULL, &midiClient);
+    status = MIDIClientCreate(CFSTR("MIDI client"), NULL, NULL, &m_midiClient);
     NSCAssert1(status == noErr, @"Error creating MIDI client: %d", status);
 
-    status = MIDIInputPortCreate(midiClient, CFSTR("MIDI input"), midiInputCallback, this, &inputPort);
+    status = MIDIInputPortCreate(m_midiClient, CFSTR("MIDI input"), midiInputCallback, this, &m_inputPort);
     NSCAssert1(status == noErr, @"Error creating MIDI input port: %d", status);
 
     ItemCount numOfDevices = MIDIGetNumberOfDevices();
@@ -47,8 +45,13 @@ En::MidiDevice::MidiDevice(QObject *parent) : QObject(parent)
     for (ItemCount i = 0; i < numOfDevices; i++) {
         qDebug() << "Connecting MIDI device" << i;
         MIDIEndpointRef src = MIDIGetSource(i);
-        MIDIPortConnectSource(inputPort, src, NULL);
+        MIDIPortConnectSource(m_inputPort, src, NULL);
     }
+}
+
+En::MidiDevice::~MidiDevice()
+{
+    MIDIClientDispose(m_midiClient);
 }
 
 void En::MidiDevice::postMidiEvent(const QByteArray& event)

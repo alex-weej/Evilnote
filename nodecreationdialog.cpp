@@ -2,6 +2,7 @@
 
 #include "mixernode.h"
 #include "vstnode.h"
+#include "midiinputnode.h"
 #include "core.h"
 
 namespace En
@@ -40,6 +41,7 @@ NodeCreationWidget::NodeCreationWidget(NodeGroup* nodeGroup, QPointF pos, QWidge
     // TODO: escape handling
 
     m_factories["Mixer"] = new MixerNode::Factory();
+    m_factories["MIDI Input"] = new MidiInputNode::Factory();
 
     Core* core = Core::instance();
     Q_FOREACH (QString name, core->vstInfoMap().keys()) {

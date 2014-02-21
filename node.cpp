@@ -1,14 +1,14 @@
 #include "node.h"
 #include "vstnode.h"
 #include "mixernode.h"
+#include "midiinputnode.h"
 
 namespace En
 {
 
 const float* Node::s_nullInputBuffer = 0;
 
-void Node::disconnectNode()
-{
+void Node::disconnectNode() {
     if (nodeGroup()) {
 
         Q_FOREACH (Node* node, inputs()) {
@@ -28,6 +28,10 @@ void Node::Visitor::visit(VstNode* node) {
 }
 
 void Node::Visitor::visit(MixerNode* node) {
+    visit(static_cast<Node*>(node));
+}
+
+void Node::Visitor::visit(MidiInputNode* node) {
     visit(static_cast<Node*>(node));
 }
 
